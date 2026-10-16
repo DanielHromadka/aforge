@@ -12,6 +12,7 @@ import { BuildStage } from './stages/BuildStage'
 import { CodeStage } from './stages/CodeStage'
 import { PreviewStage } from './stages/PreviewStage'
 import { TestsStage } from './stages/TestsStage'
+import { AgentsView } from './stages/AgentsView'
 
 export const STAGE_META: { id: Stage; label: string; icon: IconName }[] = [
   { id: 'design', label: 'Design', icon: 'design' },
@@ -127,7 +128,13 @@ export const App = () => {
 
 const Studio = ({ sidebarProjects, onRenamed }: { sidebarProjects: ReactNode; onRenamed: () => void }) => {
   const s = useStudio()
-  const { project, stage } = s
+  const { project } = s
+  const [agentsView, setAgentsView] = useState(false)
+  const stage = agentsView ? null : s.stage
+  const setStage = (st: Stage) => {
+    setAgentsView(false)
+    s.setStage(st)
+  }
   const counts: Partial<Record<Stage, number | undefined>> = {
     design: project.screens.length,
     stories: project.stories.length,
@@ -143,7 +150,7 @@ const Studio = ({ sidebarProjects, onRenamed }: { sidebarProjects: ReactNode; on
       const n = Number(e.key)
       if (n >= 1 && n <= STAGE_META.length) {
         e.preventDefault()
-        s.setStage(STAGE_META[n - 1]!.id)
+        setStage(STAGE_META[n - 1]!.id)
       }
       if (e.key === 'j') {
         e.preventDefault()
@@ -185,7 +192,7 @@ const Studio = ({ sidebarProjects, onRenamed }: { sidebarProjects: ReactNode; on
         <div className="spacer" />
         <div className="segmented" role="tablist">
           {STAGE_META.map((m, i) => (
-            <button key={m.id} role="tab" aria-selected={stage === m.id} className={stage === m.id ? 'active' : ''} onClick={() => s.setStage(m.id)} title={`${m.label} (⌘${i + 1})`}>
+            <button key={m.id} role="tab" aria-selected={stage === m.id} className={stage === m.id ? 'active' : ''} onClick={() => setStage(m.id)} title={`${m.label} (⌘${i + 1})`}>
               {m.label}
               {counts[m.id] ? <span className="num">{counts[m.id]}</span> : null}
             </button>
@@ -214,13 +221,21 @@ const Studio = ({ sidebarProjects, onRenamed }: { sidebarProjects: ReactNode; on
                   <span className="badge">{counts[m.id]}</span>
                 ) : null
               return (
-                <button key={m.id} className={`side-link ${stage === m.id ? 'current' : ''}`} onClick={() => s.setStage(m.id)}>
+                <button key={m.id} className={`side-link ${stage === m.id ? 'current' : ''}`} onClick={() => setStage(m.id)}>
                   <I />
                   <span>{m.label}</span>
                   {badge}
                 </button>
               )
             })}
+          </div>
+          <div className="side-section">
+            <div className="side-header">Infrastruktura</div>
+            <button className={`side-link ${agentsView ? 'current' : ''}`} onClick={() => setAgentsView(true)}>
+              <Icon.sparkles />
+              <span>Agenti a pipeline</span>
+              {s.pipeline && (s.pipeline.status === 'running' || s.pipeline.status === 'planning') ? <span className="dot run" /> : null}
+            </button>
           </div>
           <div className="side-section">
             <div className="side-header">
@@ -232,7 +247,7 @@ const Studio = ({ sidebarProjects, onRenamed }: { sidebarProjects: ReactNode; on
                   const id = `screen-${Math.random().toString(36).slice(2, 7)}`
                   s.update((p) => ({ ...p, screens: [...p.screens, { id, name: `Obrazovka ${p.screens.length + 1}`, width: 1280, height: 800, elements: [] }] }))
                   s.setFocus({ screenId: id })
-                  s.setStage('design')
+                  setStage('design')
                 }}
               >
                 <Icon.plus />
@@ -244,7 +259,7 @@ const Studio = ({ sidebarProjects, onRenamed }: { sidebarProjects: ReactNode; on
                 className={`side-link ${stage === 'design' && s.focus.screenId === sc.id ? 'current' : ''}`}
                 onClick={() => {
                   s.setFocus({ screenId: sc.id })
-                  s.setStage('design')
+                  setStage('design')
                 }}
               >
                 <Icon.screen />
@@ -254,6 +269,7 @@ const Studio = ({ sidebarProjects, onRenamed }: { sidebarProjects: ReactNode; on
           </div>
         </aside>
         <main className="content">
+          {agentsView && <AgentsView />}
           {stage === 'design' && <DesignStage />}
           {stage === 'stories' && <StoriesStage />}
           {stage === 'blocks' && <BlocksStage />}

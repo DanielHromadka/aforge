@@ -1,7 +1,7 @@
 // Per-project event bus behind the SSE endpoint: build output, container logs and test progress.
 import { EventEmitter } from 'node:events'
 
-export type Channel = 'build' | 'preview' | 'tests' | 'project'
+export type Channel = 'build' | 'preview' | 'tests' | 'project' | 'pipeline' | 'hub'
 
 export interface HubEvent {
   channel: Channel

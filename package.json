@@ -2,7 +2,7 @@
   "name": "aforge",
   "private": true,
   "version": "0.1.0",
-  "description": "Low-code AI studio: wireframes + user stories → blocks → Claude Code / Codex implementation → isolated container preview and tests",
+  "description": "Low-code AI studio: wireframes + user stories \u2192 blocks \u2192 Claude Code / Codex implementation \u2192 isolated container preview and tests",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -11,9 +11,11 @@
   "scripts": {
     "dev": "concurrently -n server,web -c blue,green \"npm run dev -w @aforge/server\" \"npm run dev -w @aforge/web\"",
     "build": "npm run build -w @aforge/web",
-    "typecheck": "tsc --noEmit -p packages/shared && tsc --noEmit -p apps/server && tsc --noEmit -p apps/web",
+    "typecheck": "tsc --noEmit -p packages/shared && tsc --noEmit -p packages/protocol && tsc --noEmit -p packages/runner && tsc --noEmit -p apps/server && tsc --noEmit -p apps/relay && tsc --noEmit -p apps/worker && tsc --noEmit -p apps/web",
     "test": "vitest run",
-    "runtime:build": "docker build -t aforge-runtime:latest runtime"
+    "runtime:build": "docker build -t aforge-runtime:latest runtime",
+    "relay": "npm start -w @aforge/relay",
+    "worker": "npm start -w @aforge/worker"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

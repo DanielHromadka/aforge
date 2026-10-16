@@ -15,6 +15,9 @@ npm run runtime:build  # docker image aforge-runtime used by preview
 
 - `packages/shared/src/index.ts` – the domain model and the zod schemas of the agent contract (`AgentReplySchema`, `OpSchema`), plus `applyOps`. A new op needs: the schema entry, a case in `applyOps`, a label in `describeOp` (web `components/AgentPanel.tsx`) and, for file ops, handling in the accept route (server `index.ts`).
 - `apps/server/src` – Fastify routes in `index.ts`; `agents.ts` (consultant via API or `claude -p --json-schema`, implementation via `claude -p stream-json` / `codex exec --json`), `context.ts` (system prompt, context, canned intents), `build.ts` (spec + runtime contract), `preview.ts` (docker + injecting proxy), `inspector.ts`, `tests.ts`, `figma.ts`, `workspace.ts` (safePath, git), `store.ts`, `events.ts` (SSE bus).
+- `packages/protocol` – hub ⇄ relay ⇄ worker wire format (framing as aFinder's relay), enrollment tokens, per-worker ChaCha20-Poly1305 envelopes, session handshake, chunking. `packages/runner` – headless Claude Code / Codex runs and git bundle helpers, shared by server and worker.
+- `apps/server/src/hub.ts` (relay connection, worker sessions, job dispatch), `pipeline.ts` (orchestrator plan → tasks), `chat.ts` (consultant exchange, proposal decisions; serialized per project).
+- `apps/relay` – Node `ws` relay, in-memory rooms (one replica). `apps/worker/src/cli.ts` – `aforge-worker enroll|run|status`.
 - `apps/web/src` – `App.tsx` (window shell), `studio.tsx` (state, autosave, SSE), `stages/*`, `components/*`, `styles.css` (Finder tokens; light/dark via `prefers-color-scheme`).
 
 ## Conventions

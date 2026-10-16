@@ -1406,3 +1406,18 @@ select.field {
   font-weight: 600;
   font-size: 11px;
 }
+
+.section-title {
+  margin: 0 0 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--label-2);
+}
+
+.pipeline-task {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-top: 1px solid var(--separator);
+}

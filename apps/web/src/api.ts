@@ -12,7 +12,7 @@ export const api = async <T,>(path: string, init?: { method?: string; body?: unk
 }
 
 export interface HubEvent {
-  channel: 'build' | 'preview' | 'tests' | 'project'
+  channel: 'build' | 'preview' | 'tests' | 'project' | 'pipeline' | 'hub'
   kind: string
   text: string
   at: string

@@ -1,8 +1,13 @@
-// Build: turns the project model into AFORGE_SPEC.md, hands it to Claude Code or Codex in the workspace
-// and commits the result. One build per project at a time.
-import type { Project } from '@aforge/shared'
-import { implement } from './agents.js'
+// Build: turns the project model into AFORGE_SPEC.md, hands it to Claude Code or Codex – in the local
+// workspace, or on a remote worker that gets a git bundle and sends its new commits back – and commits
+// the result. One build per project at a time.
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { BuildEvent, Project } from '@aforge/shared'
+import { applyBundle, createBundle, headOf, implement } from '@aforge/runner'
 import { publish } from './events.js'
+import { hub } from './hub.js'
 import { PLAYWRIGHT_VERSION } from './tests.js'
 import { commit, ensureRepo, writeText } from './workspace.js'
 import { saveProject, loadProject, workspaceDir } from './store.js'
@@ -113,30 +118,72 @@ const PROMPT = {
     'Aplikace v tomto adresáři už existuje. Aktualizuj ji podle AFORGE_SPEC.md: dopracuj stories, které nejsou implementované, zapracuj otevřené anotace a oprav neúspěšné testy. Neměň nesouvisející kód. Na konci stručně shrň změny.',
 }
 
-export const startBuild = async (projectId: string, mode: 'full' | 'incremental') => {
-  if (running.has(projectId)) throw new Error('Build už běží')
+/** Runs one build to the end; resolves with whether the agent finished successfully. */
+const execute = async (projectId: string, mode: 'full' | 'incremental'): Promise<boolean> => {
   const project = await loadProject(projectId)
+  const cwd = workspaceDir(projectId)
   await ensureRepo(projectId)
   await writeText(projectId, 'AFORGE_SPEC.md', renderSpec(project, mode))
+  await commit(projectId, 'aForge: specifikace pro build')
   const agent = project.stack.agent
-  publish(projectId, 'build', 'start', `Spouštím ${agent === 'codex' ? 'Codex' : 'Claude Code'} (${mode === 'full' ? 'kompletní implementace' : 'inkrementální změny'})…`)
-  const job = implement(agent, workspaceDir(projectId), PROMPT[mode], (e) => publish(projectId, 'build', e.kind, e.text))
-  running.set(projectId, job.kill)
-  void job.done.then(async (code) => {
-    running.delete(projectId)
-    const hash = await commit(projectId, `aForge build (${agent}, ${mode})`)
-    if (code === 0) {
-      // Stories that were ready are now implemented; verification is the test run's job.
-      const fresh = await loadProject(projectId)
-      await saveProject({
-        ...fresh,
-        stories: fresh.stories.map((s) => (s.status === 'ready' || s.status === 'draft' ? { ...s, status: 'implemented' } : s)),
-        annotations: mode === 'incremental' ? fresh.annotations.map((a) => (a.status === 'open' ? { ...a, status: 'sent' } : a)) : fresh.annotations,
-      })
-      publish(projectId, 'project', 'changed', '')
+  const remote = hub.mode() === 'remote'
+  publish(projectId, 'build', 'start', `Spouštím ${agent === 'codex' ? 'Codex' : 'Claude Code'} ${remote ? 'na vzdáleném workeru' : 'lokálně'} (${mode === 'full' ? 'kompletní implementace' : 'inkrementální změny'})…`)
+  const onEvent = (e: BuildEvent) => publish(projectId, 'build', e.kind, e.text)
+  let ok: boolean
+  if (remote) {
+    const abort = new AbortController()
+    running.set(projectId, () => abort.abort())
+    const tmp = await mkdtemp(join(tmpdir(), 'aforge-'))
+    try {
+      await createBundle(cwd, join(tmp, 'in.bundle'))
+      const base = await headOf(cwd)
+      const res = await hub.runWithFile(
+        { kind: 'implement', agent, prompt: PROMPT[mode], base, message: `aForge build (${agent}, ${mode})` },
+        { needs: agent, labels: ['build'], input: await readFile(join(tmp, 'in.bundle')), onEvent, signal: abort.signal },
+      )
+      if (res.file) {
+        await writeFile(join(tmp, 'out.bundle'), res.file)
+        const head = await applyBundle(cwd, join(tmp, 'out.bundle'))
+        publish(projectId, 'build', 'log', `Změny z workeru načteny (${head.slice(0, 7)}).`)
+      } else publish(projectId, 'build', 'log', 'Worker nevytvořil žádné změny.')
+      ok = true
+    } catch (e) {
+      publish(projectId, 'build', 'log', (e as Error).message)
+      ok = false
+    } finally {
+      await rm(tmp, { recursive: true, force: true })
     }
-    publish(projectId, 'build', code === 0 ? 'done' : 'error', code === 0 ? `Build dokončen${hash ? `, commit ${hash}` : ''}.` : `Agent skončil s kódem ${code}.`)
+  } else {
+    const job = implement(agent, cwd, PROMPT[mode], onEvent)
+    running.set(projectId, job.kill)
+    ok = (await job.done) === 0
+  }
+  running.delete(projectId)
+  const hash = await commit(projectId, `aForge build (${agent}, ${mode})`)
+  if (ok) {
+    // Stories that were ready are now implemented; verification is the test run's job.
+    const fresh = await loadProject(projectId)
+    await saveProject({
+      ...fresh,
+      stories: fresh.stories.map((s) => (s.status === 'ready' || s.status === 'draft' ? { ...s, status: 'implemented' } : s)),
+      annotations: mode === 'incremental' ? fresh.annotations.map((a) => (a.status === 'open' ? { ...a, status: 'sent' } : a)) : fresh.annotations,
+    })
+    publish(projectId, 'project', 'changed', '')
+  }
+  publish(projectId, 'build', ok ? 'done' : 'error', ok ? `Build dokončen${hash ? `, commit ${hash}` : ''}.` : 'Agent build nedokončil.')
+  return ok
+}
+
+/** Starts a build; the returned promise settles when it ends (the pipeline waits for it, the API does not). */
+export const startBuild = (projectId: string, mode: 'full' | 'incremental'): { done: Promise<boolean> } => {
+  if (running.has(projectId)) throw new Error('Build už běží')
+  running.set(projectId, () => {})
+  const done = execute(projectId, mode).catch((e: Error) => {
+    running.delete(projectId)
+    publish(projectId, 'build', 'error', e.message)
+    return false
   })
+  return { done }
 }
 
 export const stopBuild = (projectId: string) => {

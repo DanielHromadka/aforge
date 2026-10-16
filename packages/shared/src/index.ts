@@ -276,3 +276,49 @@ export const applyOps = (project: Project, ops: Op[]): Project => {
   }
   return p
 }
+
+// ---- distributed agents --------------------------------------------------------------------
+
+export interface WorkerStatus {
+  id: string
+  name: string
+  online: boolean
+  caps?: { claude: boolean; codex: boolean; docker: boolean; git: boolean }
+  labels: string[]
+  running: number
+  maxJobs: number
+  since?: string
+  createdAt: string
+}
+
+export interface HubStatus {
+  relay: string
+  mode: 'local' | 'remote'
+  connected: boolean
+  error?: string
+  workers: WorkerStatus[]
+}
+
+export const PIPELINE_PHASES = ['stories', 'wireframes', 'blocks', 'review', 'build', 'tests'] as const
+export type PipelinePhase = (typeof PIPELINE_PHASES)[number]
+
+export interface PipelineTask {
+  id: string
+  phase: PipelinePhase
+  title: string
+  instruction: string
+  dependsOn: string[]
+  status: 'pending' | 'running' | 'awaiting' | 'done' | 'failed' | 'skipped'
+  note?: string
+}
+
+export interface PipelineRun {
+  id: string
+  status: 'planning' | 'running' | 'done' | 'failed' | 'cancelled'
+  goal: string
+  summary: string
+  autoApply: boolean
+  startedAt: string
+  finishedAt?: string
+  tasks: PipelineTask[]
+}

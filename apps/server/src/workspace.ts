@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import type { FileEntry } from '@aforge/shared'
-import { run } from './proc.js'
+import { run } from '@aforge/runner'
 import { workspaceDir } from './store.js'
 
 const HIDDEN = new Set(['.git', 'node_modules', 'bin', 'obj', 'dist', '.vite', 'playwright-report', 'test-output'])

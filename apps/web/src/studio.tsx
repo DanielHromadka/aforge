@@ -1,7 +1,7 @@
 // Studio state: the open project (saved with a short debounce), what the user focuses, the agent
 // thread and the live logs from the server's event stream.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { ChatMessage, PreviewStatus, Project, ProvidersInfo, Stage } from '@aforge/shared'
+import type { ChatMessage, PipelineRun, PreviewStatus, Project, ProvidersInfo, Stage } from '@aforge/shared'
 import { api, useProjectEvents, type HubEvent } from './api'
 
 export interface Focus {
@@ -44,6 +44,8 @@ interface Studio {
   toast: (text: string, error?: boolean) => void
   agentOpen: boolean
   setAgentOpen: (b: boolean) => void
+  pipeline: PipelineRun | null
+  setPipeline: (r: PipelineRun | null) => void
 }
 
 export const StudioContext = createContext<Studio | null>(null)
@@ -77,6 +79,7 @@ export const StudioProvider = ({
   const [previewLog, setPreviewLog] = useState('')
   const [testsLog, setTestsLog] = useState<LogLine[]>([])
   const [testsRunning, setTestsRunning] = useState(false)
+  const [pipeline, setPipeline] = useState<PipelineRun | null>(null)
   const [agentOpen, setAgentOpen] = useState(() => localStorage.getItem('aforge.agentOpen') !== '0')
 
   const pending = useRef<Project | null>(null)
@@ -122,11 +125,14 @@ export const StudioProvider = ({
       setPreviewLog(s.log)
     })
     void api<{ running: boolean }>(`/projects/${initial.id}/build`).then((b) => setBuilding(b.running))
+    void api<PipelineRun | Record<string, never>>(`/projects/${initial.id}/pipeline`).then((r) => setPipeline('id' in r ? (r as PipelineRun) : null))
     return () => void flush()
   }, [initial.id, flush])
 
   useProjectEvents(initial.id, (e: HubEvent) => {
     if (e.channel === 'project') void reload()
+    if (e.channel === 'pipeline') setPipeline(e.data as PipelineRun)
+    if (e.channel === 'build' && e.kind === 'start') setBuilding(true)
     if (e.channel === 'build') {
       setBuildLog((l) => [...(e.kind === 'start' ? [] : l.slice(-2000)), { kind: e.kind, text: e.text }])
       if (e.kind === 'done' || e.kind === 'error') {
@@ -169,9 +175,9 @@ export const StudioProvider = ({
   const value = useMemo<Studio>(
     () => ({
       project, update, flush, reload, stage, setStage, focus, setFocus, providers, chat, setChat, agentBusy, pendingText, askAgent,
-      buildLog, building, setBuilding, preview, previewLog, testsLog, testsRunning, setTestsRunning, toast, agentOpen, setAgentOpen,
+      buildLog, building, setBuilding, preview, previewLog, testsLog, testsRunning, setTestsRunning, toast, agentOpen, setAgentOpen, pipeline, setPipeline,
     }),
-    [project, update, flush, reload, stage, focus, providers, chat, agentBusy, pendingText, askAgent, buildLog, building, preview, previewLog, testsLog, testsRunning, toast, agentOpen],
+    [project, update, flush, reload, stage, focus, providers, chat, agentBusy, pendingText, askAgent, buildLog, building, preview, previewLog, testsLog, testsRunning, toast, agentOpen, pipeline],
   )
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>
 }

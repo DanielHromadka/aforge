@@ -1,17 +1,19 @@
 import Fastify from 'fastify'
-import { randomUUID } from 'node:crypto'
 import { createReadStream, existsSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
-import { applyOps, type ChatMessage, type Project, type Stage } from '@aforge/shared'
-import { consult, detectProviders } from './agents.js'
+import type { Project } from '@aforge/shared'
+import { detectProviders } from './agents.js'
+import { askConsultant, decideProposal } from './chat.js'
+import { hub } from './hub.js'
+import { cancelPipeline, loadPipeline, startPipeline } from './pipeline.js'
 import { isBuilding, renderSpec, startBuild, stopBuild } from './build.js'
-import { buildContext, CONSULTANT_SYSTEM, INTENTS, type Focus } from './context.js'
+import { INTENTS, type Focus } from './context.js'
 import { subscribe } from './events.js'
 import { importFigma } from './figma.js'
 import { previewStatus, startPreview, stopPreview } from './preview.js'
 import { createProject, listProjects, loadChat, loadProject, saveChat, saveProject } from './store.js'
 import { runTests } from './tests.js'
-import { commit, diffOf, ensureRepo, fileTree, history, readText, removeFile, safePath, writeText } from './workspace.js'
+import { commit, diffOf, ensureRepo, fileTree, history, readText, safePath, writeText } from './workspace.js'
 
 const app = Fastify({ logger: { level: 'warn' }, bodyLimit: 20 * 1024 * 1024 })
 
@@ -60,54 +62,18 @@ app.get<P>('/api/projects/:id/events', (req, reply) => {
 app.get<P>('/api/projects/:id/chat', (req) => loadChat(req.params.id))
 
 app.post<P & { Body: { text?: string; intent?: string; focus: Focus } }>('/api/projects/:id/chat', async (req) => {
-  const { id } = req.params
-  const project = await loadProject(id)
-  const chat = await loadChat(id)
-  const stage: Stage = req.body.focus?.stage ?? 'stories'
   const intentText = req.body.intent ? INTENTS[req.body.intent] : undefined
   if (req.body.intent && !intentText) throw new Error('Neznámý požadavek')
   const text = String(req.body.text ?? '').trim() || intentText
   if (!text) throw new Error('Prázdná zpráva')
-  const userMsg: ChatMessage = { id: randomUUID(), role: 'user', text, stage, proposals: [], conflicts: [], createdAt: new Date().toISOString() }
-  const context = await buildContext(project, req.body.focus ?? { stage }, chat)
-  const reply = await consult(CONSULTANT_SYSTEM, `${context}\n\n<user_request stage="${stage}">\n${text}\n</user_request>`)
-  const agentMsg: ChatMessage = {
-    id: randomUUID(),
-    role: 'agent',
-    text: reply.reply,
-    stage,
-    proposals: reply.proposals.map((p) => ({ ...p, id: `${p.id}-${randomUUID().slice(0, 4)}`, status: 'pending' as const })),
-    conflicts: reply.conflicts,
-    createdAt: new Date().toISOString(),
-  }
-  await saveChat(id, [...chat, userMsg, agentMsg])
-  return [userMsg, agentMsg]
+  return askConsultant(req.params.id, text, { ...req.body.focus, stage: req.body.focus?.stage ?? 'stories' })
 })
 
-app.post<{ Params: { id: string; msg: string; pid: string; action: string } }>(
-  '/api/projects/:id/chat/:msg/proposals/:pid/:action',
-  async (req) => {
-    const { id, msg, pid, action } = req.params
-    if (action !== 'accept' && action !== 'reject') throw new Error('Neznámá akce')
-    const chat = await loadChat(id)
-    const proposal = chat.find((m) => m.id === msg)?.proposals.find((p) => p.id === pid)
-    if (!proposal) throw new Error('Návrh nenalezen')
-    if (proposal.status !== 'pending') throw new Error('Návrh už byl vyřízen')
-    let project = await loadProject(id)
-    if (action === 'accept') {
-      project = await saveProject(applyOps(project, proposal.ops))
-      const fileOps = proposal.ops.filter((o) => o.type === 'file.write' || o.type === 'file.delete')
-      for (const op of fileOps) {
-        if (op.type === 'file.write') await writeText(id, op.path, op.content)
-        else if (op.type === 'file.delete') await removeFile(id, op.path)
-      }
-      if (fileOps.length) await commit(id, `aForge agent: ${proposal.title}`)
-    }
-    proposal.status = action === 'accept' ? 'accepted' : 'rejected'
-    await saveChat(id, chat)
-    return { project, chat }
-  },
-)
+app.post<{ Params: { id: string; msg: string; pid: string; action: string } }>('/api/projects/:id/chat/:msg/proposals/:pid/:action', (req) => {
+  const { id, msg, pid, action } = req.params
+  if (action !== 'accept' && action !== 'reject') throw new Error('Neznámá akce')
+  return decideProposal(id, msg, pid, action === 'accept')
+})
 
 app.delete<P>('/api/projects/:id/chat', async (req) => {
   await saveChat(req.params.id, [])
@@ -149,10 +115,6 @@ app.get<P & { Querystring: { path: string } }>('/api/projects/:id/raw', (req, re
 
 // ---- build, preview, tests -----------------------------------------------------------------
 
-app.post<P & { Body: { mode?: 'full' | 'incremental' } }>('/api/projects/:id/build', async (req) => {
-  await startBuild(req.params.id, req.body?.mode === 'incremental' ? 'incremental' : 'full')
-  return { ok: true }
-})
 app.post<P>('/api/projects/:id/build/stop', (req) => {
   stopBuild(req.params.id)
   return { ok: true }
@@ -171,7 +133,42 @@ app.post<P>('/api/projects/:id/preview/stop', async (req) => {
 })
 
 app.post<P>('/api/projects/:id/tests', async (req) => {
-  await runTests(req.params.id)
+  void (await runTests(req.params.id)).done.catch(() => {})
+  return { ok: true }
+})
+
+app.post<P & { Body: { mode?: 'full' | 'incremental' } }>('/api/projects/:id/build', async (req) => {
+  startBuild(req.params.id, req.body?.mode === 'incremental' ? 'incremental' : 'full')
+  return { ok: true }
+})
+
+// ---- distributed agents --------------------------------------------------------------------
+
+app.get('/api/hub', () => hub.status())
+
+app.put<{ Body: { relay?: string; mode?: 'local' | 'remote' } }>('/api/hub', (req) => {
+  const mode = req.body?.mode
+  if (mode !== undefined && mode !== 'local' && mode !== 'remote') throw new Error('Neznámý režim')
+  hub.configure({ relay: req.body?.relay, mode })
+  return hub.status()
+})
+
+app.post<{ Body: { name?: string } }>('/api/hub/workers', (req) => ({ token: hub.enroll(String(req.body?.name ?? '')) }))
+
+app.delete<{ Params: { wid: string } }>('/api/hub/workers/:wid', (req) => {
+  hub.revoke(req.params.wid)
+  return hub.status()
+})
+
+app.get<P>('/api/projects/:id/pipeline', async (req) => (await loadPipeline(req.params.id)) ?? {})
+
+app.post<P & { Body: { goal?: string; autoApply?: boolean } }>('/api/projects/:id/pipeline', async (req) => {
+  const goal = String(req.body?.goal ?? '').trim() || 'Dotáhni aplikaci podle stories do funkčního a otestovaného stavu.'
+  return startPipeline(req.params.id, goal, Boolean(req.body?.autoApply))
+})
+
+app.post<P>('/api/projects/:id/pipeline/cancel', (req) => {
+  cancelPipeline(req.params.id)
   return { ok: true }
 })
 
@@ -197,4 +194,5 @@ if (existsSync(WEB_DIST)) {
 
 const port = Number(process.env.PORT ?? 4310)
 await app.listen({ port, host: '127.0.0.1' })
+hub.start()
 console.log(`aForge server http://localhost:${port}`)

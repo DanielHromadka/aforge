@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { storyIdsInTitle, type TestCase, type TestReport } from '@aforge/shared'
 import { publish } from './events.js'
 import { containerName, networkName, previewStatus } from './preview.js'
-import { streamLines } from './proc.js'
+import { streamLines } from '@aforge/runner'
 import { loadProject, saveProject, workspaceDir } from './store.js'
 
 export const PLAYWRIGHT_VERSION = '1.64.1'
@@ -53,7 +53,8 @@ export const parseReport = (json: { suites?: PwSuite[] }): TestCase[] => {
 
 const running = new Set<string>()
 
-export const runTests = async (projectId: string) => {
+/** Starts a run; the returned promise settles with the report when it ends. */
+export const runTests = async (projectId: string): Promise<{ done: Promise<TestReport> }> => {
   if (running.has(projectId)) throw new Error('Testy už běží')
   if (previewStatus(projectId).state !== 'running') throw new Error('Nejdřív spusťte aplikaci v náhledu.')
   running.add(projectId)
@@ -81,7 +82,7 @@ export const runTests = async (projectId: string) => {
       publish(projectId, 'tests', 'log', line)
     },
   )
-  void job.done.then(async () => {
+  const done = job.done.then(async () => {
     running.delete(projectId)
     let cases: TestCase[] = []
     try {
@@ -112,5 +113,7 @@ export const runTests = async (projectId: string) => {
     })
     publish(projectId, 'project', 'changed', '')
     publish(projectId, 'tests', report.ok ? 'done' : 'error', `${cases.filter((c) => c.status === 'passed').length}/${cases.length} testů prošlo.`)
+    return report
   })
+  return { done }
 }

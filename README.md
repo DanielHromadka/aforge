@@ -39,6 +39,25 @@ Produkčně: `npm run build` a `npm start -w @aforge/server` – server pak serv
 
 Klávesy: ⌘1–⌘7 přepínají fáze, ⌘J agent, v designu šipky / ⇧šipky posun, ⌘D duplikát, Backspace smazání.
 
+## Distribuovaní agenti (workery na subscription)
+
+Konzultace, buildy i orchestrace mohou běžet na jiných serverech, kde je přihlášený Claude Code / Codex na subscription:
+
+```
+aForge (hub) ──wss──▶ relay (internet) ◀──wss── aforge-worker (server A: claude, štítky orchestrator,review)
+                                       ◀──wss── aforge-worker (server B: claude+codex, štítek build)
+```
+
+- **Relay** (`apps/relay`) přeposílá rámce mezi hubem a workery v místnosti hubu (= SHA-256 jeho tajemství, takže ji nikdo nepřevezme). Vychází z relaye aFinderu. Obsah je šifrovaný end-to-end (ChaCha20-Poly1305, klíč pro každého workera), relay vidí jen id workera. Spuštění: `npm run relay` (port 8787), produkčně kontejner `apps/relay/Dockerfile` – viz [deploy/containerapp-relay.md](deploy/containerapp-relay.md).
+- **Worker** (`apps/worker`): v aForge *Agenti a pipeline → Přidat worker* vytvoří jednorázový token, na serveru pak
+  ```bash
+  npx aforge-worker enroll <token> --name build-01 --labels build,review --max-jobs 1
+  npx aforge-worker run          # nebo systemd: deploy/aforge-worker.service
+  ```
+  Worker se připojuje jen odchozím spojením, ohlásí schopnosti (claude, codex, docker, git) a štítky, a běží na přihlášení CLI (subscription).
+- **Režim** *Lokálně / Vzdálení workeři* v aForge určuje, kde běží konzultace a buildy. Build na workeru dostane git bundle repozitáře a vrátí bundle s novými commity, které se do workspace fast-forwardnou.
+- **Pipeline**: cíl + *Spustit pipeline* → orchestrátor (worker se štítkem `orchestrator`) z celého kontextu sestaví plán úloh po fázích (stories, wireframy, bloky, review, build, testy) se závislostmi; hub ho vykoná a nezávislé úlohy rozdělí paralelně na volné workery podle schopností, štítků a vytížení. Návrhy změn modelu čekají na schválení (volitelně se přijímají automaticky), kód vždy na člověka.
+
 ## Data
 
 Vše leží v `data/projects/<id>/` (mimo git): `project.json` (model), `chat.json` (konverzace s agentem) a `workspace/` (vygenerovaná aplikace, vlastní git repozitář). Jiné umístění: `AFORGE_DATA=/cesta`.

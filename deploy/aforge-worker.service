@@ -1,0 +1,18 @@
+# systemd unit for a worker server. Install the repo to /opt/aforge (npm install), log in to
+# `claude` and/or `codex` as the service user, enroll once, then:
+#   sudo cp deploy/aforge-worker.service /etc/systemd/system/ && sudo systemctl enable --now aforge-worker
+[Unit]
+Description=aForge worker (Claude Code / Codex agent daemon)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=aforge
+WorkingDirectory=/opt/aforge
+ExecStart=/usr/bin/npx tsx apps/worker/src/cli.ts run
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+{
+  "name": "@aforge/worker",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "aforge-worker": "src/cli.ts"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts run"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

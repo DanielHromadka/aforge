@@ -105,11 +105,6 @@ export const PreviewStage = () => {
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, background: 'var(--canvas)' }}>
           <div className="browser" style={{ flex: showLog ? 2 : 1 }}>
             <div className="browser-bar">
-              <div className="traffic" style={{ marginRight: 4 }}>
-                <span />
-                <span />
-                <span />
-              </div>
               <button className="tool-btn" onClick={() => setReloadKey((k) => k + 1)} disabled={!preview.url}>
                 <Icon.refresh />
               </button>

@@ -148,34 +148,11 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 12px;
+  padding: 0 12px 0 16px;
   background: var(--chrome);
   border-bottom: 1px solid var(--separator);
   user-select: none;
   min-width: 0;
-}
-
-.traffic {
-  display: flex;
-  gap: 8px;
-  margin-right: 14px;
-}
-
-.traffic span {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.18);
-}
-
-.traffic span:nth-child(1) {
-  background: #ff5f57;
-}
-.traffic span:nth-child(2) {
-  background: #febc2e;
-}
-.traffic span:nth-child(3) {
-  background: #28c840;
 }
 
 .toolbar-title {

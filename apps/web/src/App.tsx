@@ -92,11 +92,6 @@ export const App = () => {
       ) : (
         <div className="window">
           <div className="toolbar">
-            <div className="traffic">
-              <span />
-              <span />
-              <span />
-            </div>
             <div className="toolbar-title">
               <strong>aForge</strong>
               <span>AI studio pro webové aplikace</span>
@@ -164,11 +159,6 @@ const Studio = ({ sidebarProjects, onRenamed }: { sidebarProjects: ReactNode; on
   return (
     <div className="window">
       <div className="toolbar">
-        <div className="traffic">
-          <span />
-          <span />
-          <span />
-        </div>
         <div className="toolbar-title">
           <strong
             contentEditable

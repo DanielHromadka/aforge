@@ -8,15 +8,15 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
-    "@aws-sdk/client-s3": "^3.1152.0",
-    "@aws-sdk/s3-request-presigner": "^3.1152.0",
+    "@aws-sdk/client-s3": "^3.1164.0",
+    "@aws-sdk/s3-request-presigner": "^3.1164.0",
     "@fastify/helmet": "^13.2.0",
-    "@fastify/multipart": "^10.1.4",
-    "@fastify/rate-limit": "^11.2.1",
-    "fastify": "^5.12.7",
-    "jose": "^6.2.12",
+    "@fastify/multipart": "^10.1.8",
+    "@fastify/rate-limit": "^11.2.2",
+    "fastify": "^5.12.8",
+    "jose": "^6.2.15",
     "proper-lockfile": "^4.1.2",
-    "tldts": "^7.4.18",
+    "tldts": "^7.4.19",
     "zod": "^4.6.7"
   },
   "devDependencies": {

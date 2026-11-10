@@ -27,6 +27,7 @@ import { commit, commitDetails, diffOf, ensureRepo, fileDiff, fileTree, graphLog
 import { acceptIssue, approveBreakdown, recoverIssues, rejectBreakdown, returnIssue, startIssue, startStory, writeContract } from './tasks.js'
 import { repoDir } from './project-locations.js'
 import { deleteProjectItem, editProjectItem, ItemKindSchema } from './items.js'
+import { assignEvent, revertEvent, runIde, runInline } from './ide.js'
 import { planningInbox, readPlanningEntry, resolvePlanningEntry, savePlanning } from './planning.js'
 import { z } from 'zod'
 import multipart from '@fastify/multipart'
@@ -79,6 +80,7 @@ app.addHook('onResponse', async (req, reply) => {
       'POST /issues/:iid/run': 'Spuštěn task', 'POST /issues/:iid/accept': 'Přijat výsledek tasku', 'POST /issues/:iid/return': 'Task vrácen k přepracování',
       'POST /stories/:sid/implement': 'Spuštěna implementace story', 'POST /stories/:sid/breakdown/approve': 'Schválen rozpad story',
       'POST /contract/approve': 'Schválen API kontrakt', 'POST /tests/generate': 'Spuštěno psaní testů ke stories', 'POST /tests/run': 'Spuštěny vybrané testy', 'POST /wiki/:page/decide': 'Rozhodnuto o změně wiki',
+      'POST /ide/run': 'Zadán požadavek v IDE', 'POST /ide/inline': 'Spuštěna úprava kódu z editoru', 'POST /ide/trace/:eid/revert': 'Vrácen záznam Zapisovatele', 'POST /ide/trace/:eid/assign': 'Zařazen požadavek z IDE',
     }
     const path = (req.body as { path?: unknown } | null)?.path
     const text = route === '/file' && typeof path === 'string' ? `Upraven soubor: ${path.slice(0, 200)}` : labels[`${req.method} ${route}`] ?? 'Dokončena akce v session'
@@ -128,7 +130,9 @@ app.put<P & { Body: Project }>('/api/projects/:id', (req) =>
     attachments: current.attachments, descriptionHistory: current.descriptionHistory, jira: current.jira,
     epics: req.body.epics?.map((e) => { const old = current.epics?.find((old) => old.id === e.id); return old ? { ...e, description: old.description } : e }),
     stories: req.body.stories.map((s) => { const old = current.stories.find((old) => old.id === s.id); return old ? { ...s, description: old.description } : s }),
-    contract: current.contract, wiki: current.wiki, issues: mergeIssues(current.issues, req.body.issues),
+    contract: current.contract, wiki: current.wiki, trace: current.trace, issues: mergeIssues(current.issues, req.body.issues),
+    // The topic is the Scribe's; the client only changes the switches.
+    ide: req.body.ide ? { record: req.body.ide.record === 'review' ? 'review' : 'auto', wiki: req.body.ide.wiki === 'review' ? 'review' : 'auto', voice: req.body.ide.voice === true, topic: current.ide?.topic } : current.ide,
   }}))
 
 // ---- live events (SSE) ---------------------------------------------------------------------
@@ -381,6 +385,14 @@ app.post<{ Params: { id: string; page: string }; Body: { accept?: boolean } }>('
   })
   return { ...project, wiki }
 }))
+
+// ---- agentic IDE --------------------------------------------------------------------------
+
+type T = { Params: { id: string; eid: string } }
+app.post<P>('/api/projects/:id/ide/run', (req) => runIde(req.params.id, req.body))
+app.post<P>('/api/projects/:id/ide/inline', (req) => runInline(req.params.id, req.body))
+app.post<T>('/api/projects/:id/ide/trace/:eid/revert', (req) => revertEvent(req.params.id, req.params.eid))
+app.post<T>('/api/projects/:id/ide/trace/:eid/assign', (req) => assignEvent(req.params.id, req.params.eid, req.body))
 
 // ---- walkthroughs (recorded click-throughs) ------------------------------------------------
 

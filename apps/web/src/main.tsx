@@ -4,6 +4,7 @@ import './monaco'
 import './styles.css'
 import './walkthrough.css'
 import './git.css'
+import './ide.css'
 import { App } from './App'
 
 createRoot(document.getElementById('root')!).render(

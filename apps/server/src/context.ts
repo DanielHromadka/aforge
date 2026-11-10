@@ -11,6 +11,8 @@ export interface Focus {
   elementId?: string
   storyId?: string
   filePath?: string
+  /** Repository of the focused file; the workspace when absent. */
+  repo?: string
   /** The thread belongs to this story or issue. */
   anchor?: string
 }
@@ -88,7 +90,7 @@ export const buildContext = async (project: Project, focus: Focus, chat: ChatMes
   let focused = ''
   if (focus.filePath) {
     try {
-      focused = `\n<focused_file path="${focus.filePath}">\n${truncateNote(await readText(project.id, focus.filePath), 60_000)}\n</focused_file>`
+      focused = `\n<focused_file path="${focus.filePath}">\n${truncateNote(await readText(project.id, focus.filePath, focus.repo && focus.repo !== 'main' && reposOf(project).some((r) => r.id === focus.repo) ? focus.repo : undefined), 60_000)}\n</focused_file>`
     } catch {
       // The file may have been removed since the client opened it.
     }

@@ -1,6 +1,6 @@
 // One consultant exchange: build the context, ask the agent, store both messages in the thread.
 import { randomUUID } from 'node:crypto'
-import { applyOps, type ChatMessage, type Stage } from '@aforge/shared'
+import { applyOps, ideSettingsOf, linkPromptWork, type ChatMessage, type Stage } from '@aforge/shared'
 import { consult } from './agents.js'
 import { buildContext, CONSULTANT_SYSTEM, type Focus } from './context.js'
 import { loadChat, loadProject, saveChat, saveProject } from './store.js'
@@ -13,6 +13,10 @@ const serial = <T>(projectId: string, fn: () => Promise<T>): Promise<T> => {
   queues.set(projectId, next.catch(() => {}))
   return next
 }
+
+/** Adds messages to the thread through the same queue as the consultant. */
+export const appendChat = (projectId: string, msgs: ChatMessage[]) =>
+  serial(projectId, async () => saveChat(projectId, [...(await loadChat(projectId)), ...msgs]))
 
 export const askConsultant = async (projectId: string, text: string, focus: Focus, step?: string): Promise<[ChatMessage, ChatMessage]> => {
   const project = await loadProject(projectId)
@@ -45,7 +49,12 @@ export const decideProposal = (projectId: string, msgId: string, proposalId: str
     if (proposal.status !== 'pending') throw new Error('Návrh už byl vyřízen')
     let project = await loadProject(projectId)
     if (accept) {
-      project = await saveProject(applyOps(project, proposal.ops), 'Přijatý návrh agenta')
+      project = applyOps(project, proposal.ops)
+      // The Scribe's proposal: the prompt's tasks belong to the story once it exists, and it is the new topic.
+      const promptId = proposal.id.startsWith('p-scribe-') ? proposal.id.slice('p-scribe-'.length) : undefined
+      const story = proposal.ops.find((op) => op.type === 'story.upsert')
+      if (promptId && story?.type === 'story.upsert') project = { ...project, issues: linkPromptWork(project.issues, promptId, story.story.id), ide: { ...ideSettingsOf(project), topic: story.story.id } }
+      project = await saveProject(project, 'Přijatý návrh agenta')
       let files = 0
       for (const op of proposal.ops) {
         if (op.type === 'file.write') await writeText(projectId, op.path, op.content)

@@ -41,6 +41,13 @@ export const G = {
   pencil: () => <path d="M10.5 2.5 13.5 5.5 6 13H3v-3z" />,
   back: () => <path d="M10 3 5 8l5 5" />,
   import: () => <><path d="M8 2v7.5M5 6.5l3 3 3-3" /><path d="M2.5 10v2.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V10" /></>,
+  layout: () => <><rect x="2" y="2.5" width="12" height="11" rx="1.6" /><path d="M6 2.5v11M6 8h8" /></>,
+  mic: () => <><rect x="5.8" y="1.8" width="4.4" height="8" rx="2.2" /><path d="M3.5 7.8a4.5 4.5 0 0 0 9 0M8 12.3v2" /></>,
+  trace: () => <><path d="M2 12.5c2.5 0 2.5-9 5-9s2 6 4.5 6 1.5-3 2.5-3" /><circle cx="2" cy="12.5" r=".9" /><circle cx="13.9" cy="6.5" r=".9" /></>,
+  dive: () => <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />,
+  undo: () => <><path d="M5 3.5 2.5 6 5 8.5" /><path d="M2.5 6h7a3.5 3.5 0 0 1 0 7H6" /></>,
+  branch: () => <><circle cx="4.5" cy="3.5" r="1.5" /><circle cx="4.5" cy="12.5" r="1.5" /><circle cx="11.5" cy="5" r="1.5" /><path d="M4.5 5v6M11.5 6.5c0 3-4 2.5-7 4.5" /></>,
+  settings: () => <><circle cx="8" cy="8" r="2" /><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1" /></>,
 }
 export type GlyphName = keyof typeof G
 export const Glyph = ({ name, size = 16, stroke }: { name: GlyphName; size?: number; stroke?: number }) => {
@@ -60,6 +67,7 @@ export const STAGE_UI: Record<Stage, { glyph: GlyphName; tone: string }> = {
   tests: { glyph: 'test', tone: 'var(--c-test)' },
   wiki: { glyph: 'wiki', tone: 'var(--c-wiki)' },
   prompt: { glyph: 'chat', tone: 'var(--accent)' },
+  ide: { glyph: 'layout', tone: 'var(--c-fe)' },
 }
 export const LAYER_UI: Record<Layer, { glyph: GlyphName; tone: string }> = {
   fe: { glyph: 'fe', tone: 'var(--c-fe)' },

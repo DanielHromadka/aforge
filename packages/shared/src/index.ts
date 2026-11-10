@@ -8,14 +8,16 @@ export * from './story-review.js'
 export * from './items.js'
 export * from './planning.js'
 export * from './descriptions.js'
+export * from './ide.js'
+import type { IdeSettings, TraceEvent } from './ide.js'
 
 /** Steps of a workflow. `build` is the implementation of tasks; `prompt` is a custom prompt-only step. */
-export const STAGES = ['overview', 'design', 'stories', 'split', 'build', 'code', 'preview', 'tests', 'wiki', 'prompt'] as const
+export const STAGES = ['overview', 'design', 'stories', 'split', 'build', 'code', 'preview', 'tests', 'wiki', 'prompt', 'ide'] as const
 export type Stage = (typeof STAGES)[number]
 
 export const STEP_TITLES: Record<Stage, string> = {
   overview: 'Přehled', design: 'Design', stories: 'Stories', split: 'Rozpad', build: 'Implementace', code: 'Kód',
-  preview: 'Náhled', tests: 'Testy', wiki: 'Wiki', prompt: 'Prompt',
+  preview: 'Náhled', tests: 'Testy', wiki: 'Wiki', prompt: 'Prompt', ide: 'IDE',
 }
 export const WorkflowStepSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/),
@@ -24,7 +26,7 @@ export const WorkflowStepSchema = z.object({
   prompt: z.string().max(200_000),
 })
 export const WorkflowSchema = z.object({
-  preset: z.enum(['vibe', 'developer', 'enterprise', 'custom']),
+  preset: z.enum(['vibe', 'developer', 'ide', 'enterprise', 'custom']),
   steps: z.array(WorkflowStepSchema).min(1).max(24),
   /** Removed steps retain their prompts and can be added again. */
   retained: z.array(WorkflowStepSchema).max(200).default([]),
@@ -40,11 +42,12 @@ export type WorkflowPreset = Workflow['preset']
 export const WORKFLOW_PRESETS = {
   vibe: { label: 'Vibe coding', description: 'Z požadavku rovnou k aplikaci.', kinds: ['prompt', 'preview'] },
   developer: { label: 'Developer', description: 'Implementace, kód a ověření.', kinds: ['prompt', 'code', 'preview', 'tests'] },
+  ide: { label: 'Agentní IDE', description: 'Editor, composer a agenti; backlog a wiki se píšou samy.', kinds: ['ide', 'preview', 'tests', 'wiki'] },
   enterprise: { label: 'Enterprise', description: 'Od designu přes stories a rozpad po testy a wiki.', kinds: ['overview', 'design', 'stories', 'split', 'build', 'preview', 'tests', 'wiki'] },
 } as const
 /** The Enterprise steps before the story-centred editor; such a workflow is upgraded with its prompts. */
 const LEGACY_ENTERPRISE = ['design', 'stories', 'build', 'code', 'preview', 'tests']
-const promptOf = (p: Pick<Project, 'prompts'>, kind: Stage) => (kind === 'build' || kind === 'overview' ? '' : (p.prompts as Record<string, string | undefined>)?.[kind] ?? '')
+const promptOf = (p: Pick<Project, 'prompts'>, kind: Stage) => (kind === 'build' || kind === 'overview' || kind === 'ide' ? '' : (p.prompts as Record<string, string | undefined>)?.[kind] ?? '')
 export const workflowOf = (p: Pick<Project, 'workflow' | 'prompts'>): Workflow => {
   const w = p.workflow
   if (w && !(w.preset === 'enterprise' && w.steps.map((s) => s.kind).join() === LEGACY_ENTERPRISE.join())) return w
@@ -124,7 +127,9 @@ export interface Issue {
   repoId: string
   status: IssueStatus
   /** Where it came from: a breakdown, a failing test, a preview annotation or a person. */
-  source: 'breakdown' | 'test' | 'annotation' | 'manual'
+  source: 'breakdown' | 'test' | 'annotation' | 'manual' | 'ide'
+  /** The IDE prompt the task was planned from, so sorting the prompt later links its work to a story. */
+  promptId?: string
   testTitle?: string
   annotationId?: string
   /** Files the last run changed, between these two commits of its repository. */
@@ -284,7 +289,7 @@ export const sectionPromptsOf = (p: Pick<Project, 'workflow' | 'prompts'>): Part
   const result: Partial<Record<PromptSection, string>> = {}
   for (const step of p.workflow.steps) {
     if (step.kind === 'build') { result.blocks = p.prompts.blocks; result.plan = p.prompts.plan }
-    else if (step.kind !== 'prompt' && step.kind !== 'overview') result[step.kind] = step.prompt
+    else if (step.kind !== 'prompt' && step.kind !== 'overview' && step.kind !== 'ide') result[step.kind] = step.prompt
   }
   return result
 }
@@ -422,6 +427,9 @@ export interface Project {
   session?: SessionContext
   /** Server-owned: the signed-in user's role in the project. */
   role?: ProjectRole
+  /** Agentic IDE settings, and the server-owned trace of what the Scribe wrote. */
+  ide?: IdeSettings
+  trace?: TraceEvent[]
 }
 
 /** Totals on a project card. Agent runs and cost cover all sessions; cost is an estimate from the model rates. */
@@ -524,6 +532,8 @@ export interface ChatMessage {
   stage: Stage
   proposals: (Proposal & { status: 'pending' | 'accepted' | 'rejected' })[]
   conflicts: Conflict[]
+  /** IDE composer: the tasks the message started, one agent per repository. */
+  issueIds?: string[]
   createdAt: string
 }
 

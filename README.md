@@ -53,7 +53,20 @@ Ve **Stories** je vlevo sbalitelná struktura epic → story → task / bug → 
 
 **Analyzovat a reorganizovat** připraví revizi vybraných stories před implementací, v rozsahu projektu nebo epicu. Rozpracované a hotové stories slouží pouze jako kontext. Návrh ukáže sloučení, rozdělení, přesun, upřesnění nebo ponechání včetně zadání před/po a přiřazení každého původního kritéria. Skupiny lze upravit, přijmout nebo odmítnout jednotlivě; samotná analýza backlog nemění. Po přijetí změny se původní stories a rozpad uchovají v historii, výsledné stories dostanou nové klíče a čekají na nový rozpad. Změna zadání, designu či tasků během analýzy vyžaduje novou revizi. **Navrhnout stories** nadále generuje podklady z projektového zadání a designu přímo do boardu.
 
-Klávesy: ⌘1–⌘8 přepínají kroky, ⌘J konzultant.
+Klávesy: ⌘1–⌘8 přepínají kroky, ⌘J konzultant; v IDE ⌘L composer, ⌘K úprava výběru, ⌘⇧T Stopa, ⌘⇧↩ Ponor.
+
+### Agentní IDE
+
+Třetí tvář session vedle Studia (Enterprise) a Vibe codingu; přepínač **Studio / IDE / Vibe** je v hlavičce a mění jen předvolbu workflow, data zůstávají. Návrh UI: [docs/ide-mode.html](docs/ide-mode.html).
+
+- **Průzkumník** se soubory všech repozitářů (změny čekající na revizi jsou označené), backlogem a wiki. **Editor** (Monaco) ukazuje u souboru změnu agenta: diff inline, *Přijmout* nebo *Vrátit* s komentářem. **⌘K** pošle vybraný kód s pokynem rovnou agentovi repozitáře.
+- **Mřížka agentů**: jeden panel na repozitář (1–4 sloupce, dvojklik = celá plocha) s průběhem běhu, kontextem a workerem. Další požadavek do stejného repozitáře se zařadí do fronty za běžící.
+- **Composer** (⌘L): režim *Agent* jedním voláním naplánuje tasky po repozitářích, případně kontrakt, a spustí agenty; režim *Ptát se* je konzultant.
+- **Zapisovatel** z každého požadavku v režimu Agent zapíše backlog: nové téma = nová story (případně epic), navazující požadavek = nová kritéria aktuální story, technická změna = task bez story. Nejistý požadavek nehádá, čeká v *Nezařazeno*. Tasky z IDE mají `source: 'ide'` a odkaz na svůj požadavek.
+- **Stopa** (⌘⇧T, pilulka ve stavové liště) je časová osa všeho, co Zapisovatel a Dokumentarista zapsali, včetně bugů z testů. Záznamy *AUTO* jdou vrátit; klíč vrácené položky zůstává rezervovaný. Na boardu Studia mají takové stories štítek AUTO.
+- **Wiki**: když jsou přijaté všechny tasky story z IDE, Dokumentarista aktualizuje wiki a změnu přijme s verzí (vratnou ze Stopy).
+- **Ponor** (⌘⇧↩) je imerzní režim: běžící aplikace přes celou obrazovku, jedno pole pro požadavek, klik do aplikace přidá prvek jako kontext. Dokončený běh náhled sám přestaví; kód dál čeká na revizi.
+- **Nastavení** (ozubené kolo ve stavové liště): Zapisovatel zapisuje sám, nebo navrhuje v konzultantovi; wiki automaticky, nebo ke schválení; diktování (vypnuté ve výchozím stavu, rozpoznávání řeči zajišťuje prohlížeč a některé posílají zvuk svému poskytovateli).
 
 ### Plánování pro lidi
 

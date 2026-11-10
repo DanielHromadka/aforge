@@ -14,7 +14,7 @@ export const api = async <T,>(path: string, init?: { method?: string; body?: unk
 }
 
 export interface HubEvent {
-  channel: 'build' | 'preview' | 'tests' | 'project' | 'pipeline' | 'hub' | 'walkthrough' | 'generate' | 'session'
+  channel: 'build' | 'preview' | 'tests' | 'project' | 'pipeline' | 'hub' | 'walkthrough' | 'generate' | 'session' | 'ide'
   kind: string
   text: string
   at: string

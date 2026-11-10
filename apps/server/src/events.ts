@@ -2,7 +2,7 @@
 import { EventEmitter } from 'node:events'
 import { recordEvent } from './session-journal.js'
 
-export type Channel = 'build' | 'preview' | 'tests' | 'project' | 'pipeline' | 'hub' | 'walkthrough' | 'generate' | 'session'
+export type Channel = 'build' | 'preview' | 'tests' | 'project' | 'pipeline' | 'hub' | 'walkthrough' | 'generate' | 'session' | 'ide'
 
 export interface HubEvent {
   channel: Channel

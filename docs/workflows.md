@@ -8,6 +8,7 @@ Každá session má vlastní workflow. Hlavička ukazuje žebřík propojených 
 | --- | --- |
 | Vibe coding | Prompt → Náhled |
 | Developer | Prompt → Kód → Náhled → Testy |
+| Agentní IDE | IDE → Náhled → Testy → Wiki |
 | Enterprise | Přehled → Design → Stories → Rozpad → Implementace → Náhled → Testy → Wiki |
 
 Vlastní workflow vznikne úpravou předvolby: změnou názvů nebo pořadí, odebráním kroku, přidáním vestavěného kroku či vlastního promptového kroku. Vestavěný typ může být ve workflow jednou; vlastních promptových kroků může být více. Každý má stabilní ID a vlastní volitelný prompt. Workflow obsahuje 1 až 24 kroků.

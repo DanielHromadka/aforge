@@ -18,6 +18,7 @@ import { IssueDetail } from './ImplementStage'
 import { TestDetail } from './TestsStage'
 import { PlanningPanel, PlanningSummary } from '../components/Planning'
 import { DescriptionEditor } from '../components/DescriptionEditor'
+import { autoCreated } from './IdeTrace'
 
 const screenUrl = (p: Project, image: string) => `/api/projects/${p.id}/figma/${image}?v=${encodeURIComponent(p.figma?.syncedAt ?? '')}`
 
@@ -238,7 +239,7 @@ const StoryCard = ({ story, runs, onOpen, draggable, onDrag }: { story: Story; r
       onDragStart={(e) => { e.dataTransfer.setData('text/plain', story.id); e.dataTransfer.effectAllowed = 'move'; onDrag?.(true) }}
       onDragEnd={() => onDrag?.(false)}>
       {screen?.image && <img className="story-thumb" src={screenUrl(p, screen.image)} alt="" loading="lazy" />}
-      <span className="row-gap"><TypeIcon type="story" /><span className="key">{story.id}</span></span>
+      <span className="row-gap"><TypeIcon type="story" /><span className="key">{story.id}</span>{autoCreated(p).has(story.id) && <span className="auto-badge" title="Zapsal Zapisovatel z požadavku v IDE">AUTO</span>}</span>
       <b className="story-tile-title">{story.title}</b>
       <span className="trail">
         <PlanningSummary kind="story" id={story.id} />

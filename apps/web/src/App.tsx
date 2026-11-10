@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useState } from 'react'
-import { workflowOf, WORKFLOW_PRESETS, type AuthState, type WorkflowStep, type Project, type ProvidersInfo } from '@aforge/shared'
+import { workflowOf, workflowPreset, WORKFLOW_PRESETS, type AuthState, type WorkflowStep, type Project, type ProvidersInfo } from '@aforge/shared'
 import { AuthContext } from './auth'
 import { navigate, usePath } from './router'
 import { Home, LoginPage } from './home/Home'
@@ -11,6 +11,7 @@ import { Glyph, STAGE_UI } from './components/Glyphs'
 import { DesignInspector, DesignStage, LayersPanel } from './stages/DesignStage'
 import { WorkflowEditor } from './components/WorkflowEditor'
 import { PromptStage } from './stages/PromptStage'
+import { IdeStage } from './stages/IdeStage'
 import { StepPrompt } from './components/PromptPanels'
 import { OverviewStage } from './stages/OverviewStage'
 import { BoardStage } from './stages/BoardStage'
@@ -131,6 +132,7 @@ const Studio = ({ onOpen }: { onOpen: (id: string) => Promise<void> }) => {
       case 'tests': return <main className="content card-pane flush"><TestsStage /></main>
       case 'wiki': return <main className="content card-pane flush"><WikiStage /></main>
       case 'prompt': return <main className="content card-pane flush"><PromptStage /></main>
+      case 'ide': return <main className="ide-host"><IdeStage /></main>
     }
   }
 
@@ -170,6 +172,7 @@ const Studio = ({ onOpen }: { onOpen: (id: string) => Promise<void> }) => {
           })}
         </ol></nav>
         <div className="toolbar-actions">
+          <ModeSwitch />
           <PlanningNotificationsButton beforeOpen={s.flush} />
           {view === 'step' && <div className="menu-anchor">
             <button className={`tool-btn ${promptOpen ? 'pressed' : ''} ${s.activeStep.prompt.trim() ? 'has-prompt' : ''}`} onClick={() => setPromptOpen(!promptOpen)} title="Prompt kroku"><Glyph name="pencil" /></button>
@@ -189,6 +192,27 @@ const Studio = ({ onOpen }: { onOpen: (id: string) => Promise<void> }) => {
       </div>
       {workflowEditor && <WorkflowEditor onClose={() => setWorkflowEditor(false)} />}
       <StatusBar providers={s.providers} />
+    </div>
+  )
+}
+
+/** Studio, IDE or Vibe: three faces of the same session; switching keeps every prompt and result. */
+const MODES = [['enterprise', 'Studio'], ['ide', 'IDE'], ['vibe', 'Vibe']] as const
+const ModeSwitch = () => {
+  const s = useStudio()
+  const current = workflowOf(s.project).preset
+  if (s.project.session?.snapshot || s.project.session?.archivedAt) return null
+  return (
+    <div className="segmented mode-switch" role="group" aria-label="Režim">
+      {MODES.map(([preset, label]) => (
+        <button key={preset} className={current === preset ? 'active' : ''} disabled={s.readOnly} aria-pressed={current === preset} title={WORKFLOW_PRESETS[preset].description}
+          onClick={() => {
+            if (current === preset) return
+            const workflow = workflowPreset(preset, workflowOf(s.project))
+            s.update((p) => ({ ...p, workflow }))
+            s.setStep(workflow.steps[0]!.id)
+          }}>{label}</button>
+      ))}
     </div>
   )
 }

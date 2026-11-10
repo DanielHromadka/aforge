@@ -14,6 +14,7 @@ const HINT: Record<Stage, string> = {
   preview: 'Na co se při kontrole běžící aplikace zaměřit…',
   tests: 'Co testovat, testovací data…',
   wiki: 'Pro koho wiki píšeme, tón, co vynechat…',
+  ide: 'Konvence kódu a repozitářů, co agenti v IDE nesmí měnit…',
 }
 
 export const StepPrompt = () => {

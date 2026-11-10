@@ -19,6 +19,7 @@ const STAGE_HINT: Record<string, string> = {
   preview: 'Např. „Tlačítko Uložit je moc schované“',
   tests: 'Např. „Proč padá test?“',
   wiki: 'Např. „Popiš rezervace jednodušeji“',
+  ide: 'Např. „Proč agent změnil tenhle soubor?“',
 }
 
 export const describeOp = (op: Op, project: Project): string => {

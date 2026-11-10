@@ -89,20 +89,48 @@ export const startStory = async (projectId: string, storyId: string) => {
   const busy = [...new Set(open.map((i) => i.repoId))].filter((r) => isRepoBusy(projectId, r))
   if (busy.length) throw new Error(`V repozitáři ${busy.join(', ')} už pracuje agent.`)
   if (open.some((i) => i.layer === 'api')) await writeContract(projectId)
-  // Tests go after the implementation of their repository, so they describe what was built.
+  runInRepos(projectId, open)
+}
+
+/** Repositories side by side, each through its tasks in order; tests go after the implementation of their repository. */
+const runInRepos = (projectId: string, issues: Issue[], wait = false) => {
   const order = (i: Issue) => (i.layer === 'test' ? 1 : 0)
   const byRepo = new Map<string, Issue[]>()
-  for (const i of open.filter((x) => x.layer !== 'api').sort((a, b) => order(a) - order(b))) byRepo.set(i.repoId, [...(byRepo.get(i.repoId) ?? []), i])
-  for (const issues of byRepo.values()) {
+  for (const i of issues.filter((x) => x.layer !== 'api').sort((a, b) => order(a) - order(b))) byRepo.set(i.repoId, [...(byRepo.get(i.repoId) ?? []), i])
+  for (const [repo, own] of byRepo) {
     void (async () => {
-      for (const i of issues) if (!(await runIssue(projectId, i.id).catch(() => false))) break
+      for (const i of own) {
+        if (wait && !(await repoFree(projectId, repo))) break
+        if (!(await runIssue(projectId, i.id).catch((e: Error) => { publish(projectId, 'build', 'error', e.message, { issueId: i.id }); return false }))) break
+      }
     })()
   }
 }
 
+/** Waits for the repository's agent to finish, so a follow-up prompt queues behind the running one. */
+const repoFree = async (projectId: string, repo: string, limitMs = 60 * 60_000) => {
+  for (const until = Date.now() + limitMs; isRepoBusy(projectId, repo);) {
+    if (Date.now() > until) return false
+    await new Promise((r) => setTimeout(r, 1500))
+  }
+  return true
+}
+
+/** IDE work: the given tasks queue in their repositories behind whatever runs there. */
+export const startIssues = async (projectId: string, ids: string[]) => {
+  const project = await loadProject(projectId)
+  runInRepos(projectId, (project.issues ?? []).filter((i) => ids.includes(i.id)), true)
+}
+
 /** Accepting keeps the commit; the story is implemented once all its tasks are accepted. */
-export const acceptIssue = (projectId: string, issueId: string) =>
-  patchIssues(projectId, (i) => (i.id === issueId && i.status === 'review' ? { ...i, status: 'done', feedback: undefined, updatedAt: now() } : i), storyStatuses)
+export const acceptIssue = async (projectId: string, issueId: string) => {
+  const saved = await patchIssues(projectId, (i) => (i.id === issueId && i.status === 'review' ? { ...i, status: 'done', feedback: undefined, updatedAt: now() } : i), storyStatuses)
+  for (const fn of acceptListeners) fn(projectId, saved, issueId)
+  return saved
+}
+/** The IDE's Documenter follows accepted work without tasks.ts depending on it. */
+const acceptListeners: ((projectId: string, project: Project, issueId: string) => void)[] = []
+export const onIssueAccepted = (fn: (projectId: string, project: Project, issueId: string) => void) => { acceptListeners.push(fn) }
 
 /** Returning runs the agent again with the reviewer's comment. */
 export const returnIssue = async (projectId: string, issueId: string, feedback: string) => {

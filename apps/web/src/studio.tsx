@@ -27,6 +27,8 @@ export interface Focus {
   /** The test open in the Tests step. */
   testId?: string
   filePath?: string
+  /** Repository of the open file; the workspace when absent. */
+  repo?: string
 }
 
 export interface LogLine {
@@ -58,7 +60,8 @@ interface Studio {
   agentBusy: boolean
   /** The request in flight, shown in the thread before the agent answers. */
   pendingText: string
-  askAgent: (req: { text?: string; intent?: string; anchor?: string }) => Promise<void>
+  /** `inline`: the answer shows where it was asked (the IDE composer), so the side panel stays closed. */
+  askAgent: (req: { text?: string; intent?: string; anchor?: string; inline?: boolean }) => Promise<void>
   /** Runs a task, story, breakdown or wiki action and reloads the model. */
   act: (path: string, body?: unknown) => Promise<boolean>
   buildLog: LogLine[]
@@ -244,10 +247,10 @@ export const StudioProvider = ({
   const setStepPrompt = (text: string) => update((p) => {
     const w = workflowOf(p)
     return { ...p, workflow: { ...w, steps: w.steps.map((step) => step.id === activeStep.id ? { ...step, prompt: text } : step) },
-      ...(activeStep.kind !== 'build' && activeStep.kind !== 'prompt' && activeStep.kind !== 'overview' ? { prompts: { ...p.prompts, [activeStep.kind]: text } } : {}) }
+      ...(activeStep.kind !== 'build' && activeStep.kind !== 'prompt' && activeStep.kind !== 'overview' && activeStep.kind !== 'ide' ? { prompts: { ...p.prompts, [activeStep.kind]: text } } : {}) }
   })
 
-  const section: PromptSection = stage === 'build' ? buildPart : stage === 'overview' ? 'prompt' : stage
+  const section: PromptSection = stage === 'build' ? buildPart : stage === 'overview' || stage === 'ide' ? 'prompt' : stage
 
   useEffect(() => {
     void api<ChatMessage[]>(`/projects/${initial.id}/chat`).then(setChat)
@@ -277,6 +280,7 @@ export const StudioProvider = ({
       }
     }
     if (e.channel === 'pipeline') setPipeline(e.data as PipelineRun)
+    if (e.channel === 'ide' && e.kind === 'error') toast(e.text, true)
     // Task runs keep their own lines; a whole-project build starts its log afresh.
     const issueId = (e.data as { issueId?: string } | undefined)?.issueId
     if (e.channel === 'build' && e.kind === 'start' && !issueId) setBuilding(true)
@@ -305,12 +309,12 @@ export const StudioProvider = ({
   })
 
   const askAgent = useCallback(
-    async (req: { text?: string; intent?: string; anchor?: string }) => {
+    async (req: { text?: string; intent?: string; anchor?: string; inline?: boolean }) => {
       if (readOnly || !(await flush())) return
       setAgentBusy(true)
       setPendingText(req.text ?? '')
       // A thread anchored to a story shows in its detail, not in the side panel.
-      if (!req.anchor) setAgentOpen(true)
+      if (!req.anchor && !req.inline) setAgentOpen(true)
       try {
         const msgs = await api<ChatMessage[]>(`/projects/${initial.id}/chat`, { body: { text: req.text, intent: req.intent, focus: { stage, ...focus, stepId: activeStep.id, anchor: req.anchor } } })
         setChat((c) => [...c, ...msgs])

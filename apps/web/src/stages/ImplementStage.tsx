@@ -171,7 +171,7 @@ export const IssueDetail = ({ issue }: { issue: Issue }) => {
 type Diff = { original: string; modified: string; binary: boolean; tooLarge: boolean }
 
 /** What the task's run changed: the changed files on the left, the selected one side by side. */
-const FileDiffDialog = ({ issue, path, onPath, onClose }: { issue: Issue; path: string; onPath: (p: string) => void; onClose: () => void }) => {
+export const FileDiffDialog = ({ issue, path, onPath, onClose }: { issue: Issue; path: string; onPath: (p: string) => void; onClose: () => void }) => {
   const s = useStudio()
   const [diff, setDiff] = useState<Diff | null>(null)
   const [error, setError] = useState('')

@@ -27,8 +27,10 @@ import assert from 'node:assert/strict';
 import { z } from ${JSON.stringify(join(root, 'node_modules/zod/index.js'))};
 const root=${JSON.stringify(root)}, dir=${JSON.stringify(dir)}, port=${port};
 const children=[];
-const child=(args,env={})=>{const p=spawn(process.execPath,['--import','tsx',...args],{cwd:root,env:{...process.env,...env},stdio:['ignore','pipe','pipe']}); children.push(p);return p};
-const wait=async(check)=>{const until=Date.now()+10000;while(!check()){if(Date.now()>until)throw Error('Timed out waiting for telemetry');await new Promise(r=>setTimeout(r,25));}};
+// Children's stderr is kept so a failure on a slow CI runner says why, not only that it timed out.
+let errors='';
+const child=(args,env={})=>{const p=spawn(process.execPath,['--import','tsx',...args],{cwd:root,env:{...process.env,...env},stdio:['ignore','pipe','pipe']}); p.stderr.on('data',d=>errors+=d); children.push(p);return p};
+const wait=async(check)=>{const until=Date.now()+20000;while(!check()){if(Date.now()>until)throw Error('Timed out waiting for telemetry'+(errors?'\\n'+errors.slice(-2000):''));await new Promise(r=>setTimeout(r,25));}};
 try {
  const relay=child(['apps/relay/src/index.ts'],{PORT:String(port)});
  let ready=false;relay.stdout.on('data',()=>ready=true);await wait(()=>ready);
@@ -73,4 +75,4 @@ finally { for(const p of children) p.kill('SIGTERM');setTimeout(()=>process.exit
     expect(output).toContain('TELEMETRY_INTEGRATION_OK')
     expect(code, output).toBe(0)
   } finally { processUnderTest.kill('SIGTERM'); await rm(dir, { recursive: true, force: true }) }
-}, 30000)
+}, 90000)

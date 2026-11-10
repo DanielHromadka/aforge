@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 ARG CLAUDE_VERSION=2.1.302
 ARG CODEX_VERSION=0.163.0
 RUN apt-get update && apt-get install -y --no-install-recommends git python3 python3-venv ca-certificates ripgrep \

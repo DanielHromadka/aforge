@@ -1,6 +1,6 @@
 # aforge-runtime: the isolated Ubuntu box a generated app runs in (backend + frontend + Nginx).
 # The app's own .aforge/start.sh copies /workspace to /app, builds and starts everything.
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \

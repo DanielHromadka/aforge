@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Reactor is a browser-based low-code AI studio (Czech UI, clean macOS Finder look): Figma design → epics and stories (Jira-like keys) → breakdown into FE / BE / test tasks per repository and an API contract → a team of agents (one per repository, in parallel) implements them for review → container preview with annotations (they become bugs) → Playwright tests (failures become bugs) → a wiki for people. Web, mobile, desktop, backend or library repositories. The approved UI direction is docs/ui-redesign.html. README.md (Czech) is the feature reference, docs/ARCHITECTURE.md the design.
+Reactor is a browser-based low-code AI studio (Czech UI, clean macOS Finder look): Figma design → epics and stories (Jira-like keys) → breakdown into FE / BE / test tasks per repository and an API contract → a team of agents (one per repository, in parallel) implements them for review → container preview with annotations (they become bugs) → Playwright tests (failures become bugs) → a wiki for people. Web, mobile, desktop, backend or library repositories. The approved UI direction is docs/ui-redesign.html. README.md (English) is the GitHub front page, README.cs.md (Czech) the detailed feature reference; the website is `website/` (GitHub Pages), docs/ARCHITECTURE.md the design.
 
 ## Commands
 

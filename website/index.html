@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reactor: from a design to tested software, with a team of agents</title>
+    <meta
+      name="description"
+      content="Reactor is a self-hosted AI studio for software houses. Figma design, epics and stories, a breakdown into tasks per repository, Claude Code and Codex implementing them for your review, a container preview, Playwright tests and a wiki for people. Plus an agentic IDE that keeps the backlog written for you."
+    />
+    <meta property="og:title" content="Reactor: from a design to tested software, with a team of agents" />
+    <meta property="og:description" content="Stories, one agent per repository, a live preview, tests that file bugs and a wiki. Every change waits for your review." />
+    <meta property="og:image" content="img/hero.webp" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="img/favicon.png" />
+    <link rel="preload" as="image" href="img/hero.webp" imagesrcset="img/hero-1280.webp 1280w, img/hero.webp 2400w" imagesizes="(min-width: 1024px) 60vw, 100vw" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.3.0/index.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist-mono@5.3.0/index.css" />
+    <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.2/src/regular/style.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav">
+      <div class="wrap nav-row">
+        <a class="brand" href="#top" aria-label="Reactor home">
+          <img src="img/icon.png" width="28" height="28" alt="" />
+          <span>Reactor</span>
+        </a>
+        <nav aria-label="Sections">
+          <ul class="nav-links">
+            <li><a href="#flow">Workflow</a></li>
+            <li><a href="#ide">IDE</a></li>
+            <li><a href="#agents">Agents</a></li>
+            <li><a href="#control">Control</a></li>
+            <li><a href="#modes">Modes</a></li>
+          </ul>
+        </nav>
+        <a class="nav-github" href="https://github.com/DanielHromadka/aforge" aria-label="Reactor on GitHub" title="Source code on GitHub">
+          <i class="ph ph-github-logo" aria-hidden="true"></i>
+        </a>
+        <a class="btn btn-primary btn-small" href="#start">
+          <i class="ph ph-terminal-window" aria-hidden="true"></i><span>Get started</span>
+        </a>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- Hero: headline across, then the pitch beside the real board. -->
+      <section class="hero" id="top">
+        <div class="wrap hero-grid">
+          <h1>
+            From a design to tested software.
+            <span>With a team of agents you review.</span>
+          </h1>
+          <div class="hero-copy">
+            <p class="lede">Stories, one Claude Code or Codex agent per repository, a live preview, tests that file their own bugs and a wiki for people. Self-hosted, on your own subscriptions.</p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="#start"><i class="ph ph-terminal-window" aria-hidden="true"></i><span>Get started</span></a>
+              <a class="btn btn-ghost" href="#flow">See the workflow</a>
+            </div>
+          </div>
+          <figure class="hero-shot">
+            <img
+              src="img/hero.webp"
+              srcset="img/hero-1280.webp 1280w, img/hero.webp 2400w"
+              sizes="(min-width: 1024px) 60vw, 100vw"
+              width="2400"
+              height="1464"
+              alt="The Stories board of a bakery e-shop: epics as rows, the steps from story to done as columns, each card with its tasks per layer"
+              fetchpriority="high"
+            />
+          </figure>
+        </div>
+      </section>
+
+      <section class="facts" aria-label="At a glance">
+        <div class="wrap facts-row">
+          <div><strong>8</strong><span>steps, from the Figma design to the wiki</span></div>
+          <div><strong>1</strong><span>agent per repository, all of them in parallel</span></div>
+          <div><strong>3</strong><span>modes: Studio, the agentic IDE and vibe coding</span></div>
+          <div><strong>5</strong><span>platforms: web, mobile, desktop, backend, libraries</span></div>
+        </div>
+      </section>
+
+      <!-- Workflow: a bento with five cells of different sizes. -->
+      <section class="features reveal" id="flow">
+        <div class="wrap">
+          <h2>Work flows by story, like in Jira.</h2>
+          <p class="section-lead">Epic, story, task and bug with keys like KV-7. Every step has one colour and one icon, on the cards, the tasks and the agents, so you always see where work stands.</p>
+          <div class="bento">
+            <article class="cell cell-split">
+              <div class="cell-text">
+                <h3>A breakdown per repository</h3>
+                <p>The Architect splits stories into frontend, backend and test tasks for the right repository and keeps one OpenAPI contract for all of them.</p>
+              </div>
+              <img src="img/split-1280.webp" width="1280" height="781" alt="The breakdown: repositories and the approved API contract on the left, stories with their tasks per layer on the right" loading="lazy" />
+            </article>
+            <article class="cell cell-palette">
+              <div class="cell-text">
+                <h3>Every result waits for review</h3>
+                <p>Follow the agent step by step, open the changed files side by side, then accept or return the task with a comment.</p>
+              </div>
+              <img src="img/implement-1280.webp" width="1280" height="781" alt="A task in review with the agent's timeline: files read, written and the typecheck" loading="lazy" />
+            </article>
+            <article class="cell cell-third">
+              <div class="cell-text">
+                <h3>Click through the real app</h3>
+                <p>It runs in an isolated container. A note on any element is a bug for the right agent.</p>
+              </div>
+              <img src="img/preview-1280.webp" width="1280" height="781" alt="The running bakery e-shop in the preview, with the annotation panel" loading="lazy" />
+            </article>
+            <article class="cell cell-third">
+              <div class="cell-text">
+                <h3>Tests that file bugs</h3>
+                <p>Playwright tests map to stories by key. A failing one opens a bug; passing again closes it.</p>
+              </div>
+              <img src="img/tests-1280.webp" width="1280" height="781" alt="Tests grouped by epic and story, one failing test under the cart story" loading="lazy" />
+            </article>
+            <article class="cell cell-third">
+              <div class="cell-text">
+                <h3>A wiki for people</h3>
+                <p>After green tests the Documenter writes what each feature does and how. You accept the change.</p>
+              </div>
+              <img src="img/wiki-1280.webp" width="1280" height="781" alt="The wiki page of the catalog epic with how-to steps and rules" loading="lazy" />
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Overview: one wide screenshot, three short columns under it. -->
+      <section class="preview reveal" id="overview">
+        <div class="wrap">
+          <h2>What waits for you, at a glance.</h2>
+          <figure class="wide-shot">
+            <img
+              src="img/overview.webp"
+              srcset="img/overview-1280.webp 1280w, img/overview.webp 2400w"
+              sizes="(min-width: 1280px) 1200px, 100vw"
+              width="2400"
+              height="1464"
+              alt="The overview: stories per step, the items waiting for you and who of the agent team works on what"
+              loading="lazy"
+            />
+          </figure>
+          <div class="columns">
+            <div>
+              <i class="ph ph-figma-logo" aria-hidden="true"></i>
+              <h3>Design stays in Figma</h3>
+              <p>Frames become screens and layers become elements. Notes, linked stories and what is being worked on live beside them.</p>
+            </div>
+            <div>
+              <i class="ph ph-users-three" aria-hidden="true"></i>
+              <h3>Agents as a team</h3>
+              <p>Analyst, Architect, FE and BE developers, Tester and Documenter, each with its role in the steps it owns.</p>
+            </div>
+            <div>
+              <i class="ph ph-devices" aria-hidden="true"></i>
+              <h3>Not only the web</h3>
+              <p>Repositories for web, mobile, desktop, backend or a library, each built by its own agent against one contract.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- IDE: the steps scroll, the screenshot stays pinned and follows them. -->
+      <section class="dev" id="ide">
+        <div class="wrap">
+          <p class="eyebrow">New: the agentic IDE</p>
+          <h2>Write prompts and code. The backlog writes itself.</h2>
+          <div class="story">
+            <ol class="steps">
+              <li class="step" data-shot="0">
+                <h3>A composer that plans per repository</h3>
+                <p>One prompt becomes tasks for each repository's agent, running side by side in the grid. The agents' diffs show inline in the editor, and <kbd data-key="mod">⌘</kbd><kbd>K</kbd> sends a selection straight to its agent.</p>
+                <img class="step-shot" src="img/ide-1280.webp" width="1280" height="781" alt="The IDE: files of two repositories, the editor with the agent's inline diff, the agents grid and the composer" loading="lazy" />
+              </li>
+              <li class="step" data-shot="1">
+                <h3>The Scribe keeps the trace</h3>
+                <p>A new topic becomes a story, a follow-up adds criteria, a technical change stays a task. Nothing is guessed: unsure prompts wait unsorted, and every AUTO record can be reverted.</p>
+                <img class="step-shot" src="img/trace-1280.webp" width="1280" height="781" alt="The trace: prompts and the stories, tasks, contract and wiki pages written from them" loading="lazy" />
+              </li>
+              <li class="step" data-shot="2">
+                <h3>Dive in</h3>
+                <p>The Ponor shows only the running app and one prompt line. Click an element to talk about it; finished runs rebuild the preview, and the code still waits for review.</p>
+                <img class="step-shot" src="img/ponor-1280.webp" width="1280" height="781" alt="The immersive mode: the running app full screen, agent rings and the prompt line" loading="lazy" />
+              </li>
+            </ol>
+            <div class="story-stage" aria-hidden="true">
+              <img src="img/ide.webp" width="2400" height="1464" alt="" loading="lazy" class="active" />
+              <img src="img/trace.webp" width="2400" height="1464" alt="" loading="lazy" />
+              <img src="img/ponor.webp" width="2400" height="1464" alt="" loading="lazy" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agents: a command and the labels on the left, the runs and workers on the right. -->
+      <section class="mcp reveal" id="agents">
+        <div class="wrap mcp-grid">
+          <div class="mcp-copy">
+            <h2>Agents on your own servers.</h2>
+            <p class="section-lead">Workers run where Claude Code or Codex is signed in on a subscription. They connect out to a relay, so no server opens a port, and everything they exchange is end-to-end encrypted.</p>
+            <pre class="code" aria-label="Commands that enroll and start a worker"><code><span class="c-mute">$</span> npx aforge-worker enroll <span class="c-accent">&lt;token&gt;</span> \
+    --name build-01 --labels build,review
+<span class="c-mute">$</span> npx aforge-worker run</code></pre>
+            <ul class="tools" aria-label="Worker labels">
+              <li>orchestrator</li>
+              <li>build</li>
+              <li>review</li>
+              <li>claude</li>
+              <li>codex</li>
+              <li>docker</li>
+            </ul>
+            <p class="note">The orchestrator plans a pipeline; the hub hands independent tasks to free workers by capability, label and load. Tokens and cost are reported, never estimated from prompt length.</p>
+          </div>
+          <img class="framed" src="img/agents-1280.webp" srcset="img/agents-1280.webp 1280w, img/agents.webp 2400w" sizes="(min-width: 1024px) 50vw, 100vw" width="1280" height="781" alt="Agent runs with their worker, step, context window and cost" loading="lazy" />
+        </div>
+      </section>
+
+      <!-- Control: a statement and four plain items, no cards. -->
+      <section class="privacy reveal" id="control">
+        <div class="wrap privacy-grid">
+          <h2>You stay in charge.</h2>
+          <ul class="privacy-list">
+            <li>
+              <i class="ph ph-hand-palm" aria-hidden="true"></i>
+              <h3>Agents propose, people decide</h3>
+              <p>The consultant answers with proposals you accept or reject. Code from every run waits for your review.</p>
+            </li>
+            <li>
+              <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
+              <h3>Everything has a way back</h3>
+              <p>Every change is a git commit; descriptions and wiki pages keep their versions; Scribe records can be reverted.</p>
+            </li>
+            <li>
+              <i class="ph ph-cube" aria-hidden="true"></i>
+              <h3>Isolated runs</h3>
+              <p>Previews, tests and production agents run in bounded containers with filtered networking, never with the host's environment.</p>
+            </li>
+            <li>
+              <i class="ph ph-buildings" aria-hidden="true"></i>
+              <h3>Self-hosted</h3>
+              <p>Your server, your Keycloak, your subscriptions. Projects are plain JSON and git repositories on your disk.</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Modes: one big screenshot, a row of mode chips. -->
+      <section class="themes reveal" id="modes">
+        <div class="wrap">
+          <h2>One project, three ways to work.</h2>
+          <p class="section-lead">Switch a session between the Studio, the IDE and vibe coding at any time; every story, task and prompt stays. In the clean <span translate="no">Finder</span> look, light or dark with the system.</p>
+          <div class="theme-picker" role="tablist" aria-label="Modes">
+            <button role="tab" data-shot="hero" aria-selected="true">Studio</button>
+            <button role="tab" data-shot="ide">IDE</button>
+            <button role="tab" data-shot="ponor">Ponor</button>
+            <button role="tab" data-shot="dark">Dark</button>
+          </div>
+          <figure class="theme-stage" role="tabpanel" aria-live="polite">
+            <img id="mode-shot" src="img/hero.webp" srcset="img/hero-1280.webp 1280w, img/hero.webp 2400w" sizes="(min-width: 1280px) 1200px, 100vw" width="2400" height="1464" alt="Reactor in the Studio" loading="lazy" />
+            <figcaption id="mode-note">The whole flow, from the design to the wiki, story by story.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- Start: the commands to run it, then where to read on. -->
+      <section class="download reveal" id="start">
+        <div class="wrap">
+          <div class="download-panel">
+            <img class="download-icon" src="img/icon.png" width="128" height="128" alt="" />
+            <div class="download-main">
+              <h2>Run Reactor.</h2>
+              <p class="section-lead">Node.js 22, Docker and a signed-in Claude Code (or Codex). Free and open source under the GPL.</p>
+              <pre class="code" aria-label="Commands that start Reactor"><code><span class="c-mute">$</span> git clone https://github.com/DanielHromadka/aforge.git
+<span class="c-mute">$</span> cd aforge &amp;&amp; npm install
+<span class="c-mute">$</span> npm run runtime:build <span class="c-mute"># once: the preview image</span>
+<span class="c-mute">$</span> AFORGE_AUTH=off npm run dev <span class="c-mute"># http://localhost:5310</span></code></pre>
+              <a class="btn btn-primary btn-large" href="https://github.com/DanielHromadka/aforge#readme">
+                <i class="ph ph-book-open" aria-hidden="true"></i><span>Read the guide</span>
+              </a>
+            </div>
+          </div>
+          <div class="builds">
+            <h3>Going further</h3>
+            <ul class="build-list">
+              <li class="build"><a href="https://github.com/DanielHromadka/aforge/blob/main/deploy/production/INSTALL.md"><i class="ph ph-hard-drives" aria-hidden="true"></i><span>Production on one Linux server</span></a></li>
+              <li class="build"><a href="https://github.com/DanielHromadka/aforge/blob/main/docs/ARCHITECTURE.md"><i class="ph ph-graph" aria-hidden="true"></i><span>Architecture</span></a></li>
+              <li class="build"><a href="https://github.com/DanielHromadka/aforge/blob/main/README.cs.md"><i class="ph ph-translate" aria-hidden="true"></i><span>Full feature reference (Czech)</span></a></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer-row">
+        <a class="brand" href="#top"><img src="img/icon.png" width="24" height="24" alt="" /><span>Reactor</span></a>
+        <ul class="footer-links">
+          <li><a href="https://github.com/DanielHromadka/aforge">GitHub</a></li>
+          <li><a href="https://github.com/DanielHromadka/aforge/issues/new">Report a bug</a></li>
+          <li><a href="https://github.com/DanielHromadka/aforge/blob/main/SECURITY.md">Security</a></li>
+          <li><a href="https://github.com/DanielHromadka/aforge/blob/main/LICENSE">License</a></li>
+        </ul>
+        <p class="footer-note">Not affiliated with Anthropic, OpenAI, Figma or Apple. Their names are their trademarks.</p>
+      </div>
+    </footer>
+    <script src="site.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<!-- The demo project's running app for the screenshots: the bakery's order summary with a discount code. -->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>Kvásek</title>
+<style>
+  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; background: #faf7f2; color: #2b2118 }
+  header { display: flex; align-items: center; gap: 24px; padding: 14px 32px; background: #fff; border-bottom: 1px solid #eee3d3 }
+  header b { font-size: 20px; color: #9a5b1e }
+  header nav { display: flex; gap: 18px; color: #5f4f3e }
+  header .cart { margin-left: auto; background: #9a5b1e; color: #fff; border-radius: 18px; padding: 4px 14px; font-weight: 600 }
+  main { display: grid; grid-template-columns: 1fr 300px; gap: 28px; padding: 28px 32px; max-width: 980px }
+  h1 { margin: 0 0 14px; font-size: 24px }
+  .row { display: flex; align-items: center; gap: 14px; background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(60,40,10,.06) }
+  .row i { width: 52px; height: 52px; border-radius: 10px; background: linear-gradient(135deg, #e8c58f, #b97a3a); flex: none }
+  .row span { flex: 1 } .row small { display: block; color: #6b5b4a }
+  .qty { background: #f3ece2; border-radius: 8px; padding: 2px 10px }
+  aside { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 1px 2px rgba(60,40,10,.06); align-self: start }
+  aside div { display: flex; justify-content: space-between; margin: 6px 0 }
+  aside .coupon { display: block; margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: #effaf1; color: #1f7a3a; font-size: 13px }
+  .coupon a { color: #1f7a3a }
+  .total { font-size: 20px; font-weight: 700; border-top: 1px solid #eee3d3; padding-top: 10px; margin-top: 10px }
+  .total s { font-size: 14px; color: #6b5b4a; font-weight: 400; margin-right: 6px }
+  button { width: 100%; margin-top: 14px; border: 0; border-radius: 10px; padding: 12px; background: #9a5b1e; color: #fff; font: 600 15px inherit }
+  .slot { margin-top: 10px; font-size: 13px; color: #5f4f3e }
+</style>
+</head>
+<body>
+<header><b>Kvásek</b><nav><span>Dnešní pečivo</span><span>Dorty</span><span>Prodejny</span></nav><span class="cart">Košík · 4</span></header>
+<main>
+  <section>
+    <h1>Rekapitulace objednávky</h1>
+    <div class="row"><i></i><span>Kváskový chléb 1 kg<small>pšenično-žitný</small></span><span class="qty">1 ×</span><b>89 Kč</b></div>
+    <div class="row"><i></i><span>Máslový croissant<small>čerstvě ráno</small></span><span class="qty">4 ×</span><b>156 Kč</b></div>
+    <div class="row"><i></i><span>Skořicový šnek<small>s ořechy</small></span><span class="qty">2 ×</span><b>98 Kč</b></div>
+    <div class="slot">Vyzvednutí: zítra 7:30–8:00 · Prodejna Vinohrady</div>
+  </section>
+  <aside>
+    <div><span>Mezisoučet</span><span>343 Kč</span></div>
+    <div class="coupon"><b>Sleva JARO10 · −10 %</b><br>Ušetříte 34 Kč · <a href="#">Odebrat kód</a></div>
+    <div class="total"><span>Celkem</span><span><s>343 Kč</s>309 Kč</span></div>
+    <button>Objednat k vyzvednutí</button>
+  </aside>
+</main>
+</body>
+</html>

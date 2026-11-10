@@ -178,7 +178,8 @@ const Studio = ({ onOpen }: { onOpen: (id: string) => Promise<void> }) => {
             <button className={`tool-btn ${promptOpen ? 'pressed' : ''} ${s.activeStep.prompt.trim() ? 'has-prompt' : ''}`} onClick={() => setPromptOpen(!promptOpen)} title="Prompt kroku"><Glyph name="pencil" /></button>
             {promptOpen && <div className="popover" onKeyDown={(e) => e.key === 'Escape' && setPromptOpen(false)}><StepPrompt /></div>}
           </div>}
-          <button className="tool-btn" onClick={() => setWorkflowEditor(true)} title="Workflow">{workflow.preset === 'custom' ? 'Vlastní' : WORKFLOW_PRESETS[workflow.preset].label}</button>
+          {/* The mode switch names the preset; the editor stays one icon so the ladder keeps its room. */}
+          <button className="tool-btn" onClick={() => setWorkflowEditor(true)} title={`Workflow: ${workflow.preset === 'custom' ? 'Vlastní' : WORKFLOW_PRESETS[workflow.preset].label}`} aria-label="Upravit workflow"><Glyph name="settings" /></button>
           <button className={`tool-btn ${view === 'history' ? 'pressed' : ''}`} onClick={() => setView(view === 'history' ? 'step' : 'history')} title="Sessions a historie"><Glyph name="history" /></button>
           <button className={`tool-btn ${view === 'agents' ? 'pressed' : ''}`} onClick={() => setView(view === 'agents' ? 'step' : 'agents')} title="Agenti a pipeline"><Glyph name="team" /></button>
           <button className={`tool-btn ${s.agentOpen ? 'pressed' : ''}`} onClick={() => s.setAgentOpen(!s.agentOpen)} title="Konzultant (⌘J)">

@@ -5,7 +5,8 @@
 .ide { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; gap: 6px; position: relative; }
 .ide-body { display: grid; grid-template-columns: 230px minmax(0, 1fr) 340px; gap: 8px; flex: 1; min-height: 0; }
 .ide-center { display: grid; grid-template-rows: minmax(0, 1fr) minmax(170px, 34%); gap: 8px; min-width: 0; min-height: 0; }
-.mode-switch button { min-width: 52px; }
+.mode-switch { flex-shrink: 0; }
+.mode-switch button { padding-inline: 8px; }
 
 /* explorer */
 .ide-explorer { display: flex; flex-direction: column; }
@@ -69,7 +70,7 @@
 .ide-meter i { display: block; height: 100%; background: var(--tone); transition: width .4s; }
 .ide-term { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px; background: var(--term-bg); color: var(--term-fg); font: 10.5px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ide-term .g { color: #6fdc8c; } .ide-term .r { color: #ff8a80; } .ide-term .d { color: #9a9aa2; }
-.ide-term-file { display: inline; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; }
+.ide-term-file { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; }
 .ide-pane footer { display: flex; align-items: center; gap: 6px; padding: 6px 8px; }
 
 /* composer */
@@ -83,7 +84,9 @@
 .ide-ctx { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 12px 0; }
 .ide-pill { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; height: 22px; padding: 0 8px 0 5px; border: 0; border-radius: 11px; background: var(--window); color: var(--label-2); font: inherit; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .ide-input { display: flex; flex-direction: column; gap: 8px; margin: 8px 10px 10px; padding: 10px; border-radius: 12px; background: var(--window); }
-.ide-input textarea { border: 0; background: transparent; color: var(--label); font: inherit; font-size: 13px; line-height: 1.45; resize: none; outline: none; }
+.ide-input textarea { border: 0; background: transparent; color: var(--label); font: inherit; font-size: 13px; line-height: 1.45; resize: none; outline: none; box-shadow: none; }
+/* The whole box shows focus, not the bare textarea inside it. */
+.ide-input:focus-within, .im-prompt:focus-within { box-shadow: 0 0 0 2px var(--accent-ring); }
 .ide-input .field.small { width: auto; height: 26px; font-size: 12px; }
 .tool-btn.rec { color: var(--red); }
 
@@ -140,7 +143,7 @@
 @keyframes im-fade { 0%, 60% { filter: none; } 100% { filter: opacity(.35); } }
 .im-review { position: absolute; left: 50%; bottom: 152px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-radius: 12px; background: rgba(30, 30, 36, .92); font-size: 12.5px; }
 .im-prompt { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); width: min(680px, calc(100% - 48px)); display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 16px; background: rgba(30, 30, 36, .94); box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
-.im-prompt textarea { border: 0; background: transparent; color: var(--label); font: inherit; font-size: 15px; line-height: 1.45; resize: none; outline: none; }
+.im-prompt textarea { border: 0; background: transparent; color: var(--label); font: inherit; font-size: 15px; line-height: 1.45; resize: none; outline: none; box-shadow: none; }
 .im-said { font-size: 15px; }
 .im-said em { color: var(--label-3); font-style: normal; }
 .im-mic { width: 30px; height: 30px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--control); color: var(--label); cursor: pointer; }

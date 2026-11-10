@@ -19,3 +19,7 @@ data/
 *.tfstate
 *.tfstate.*
 terraform.tfvars
+
+# Website screenshot sources (website/scripts/screenshots.cjs) and local design-tool state
+website/scripts/raw/
+.impeccable/

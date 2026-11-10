@@ -27,7 +27,8 @@ try {
   await run('git', ['add', '.'], { cwd: join(dir, 'data/projects/fixture/workspace') })
   await run('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'fixture'], { cwd: join(dir, 'data/projects/fixture/workspace') })
   await docker(['run', '-d', '--rm', '--name', name, '--network', 'none', '-e', 'POSTGRES_USER=keycloak', '-e', 'POSTGRES_DB=keycloak', '-e', 'POSTGRES_PASSWORD=disposable-password', 'postgres:17-bookworm'])
-  for (let attempt = 0; attempt < 90; attempt++) { if ((await run('docker', ['exec', name, 'pg_isready', '-U', 'keycloak', '-d', 'keycloak'])).code === 0) break; await setTimeout(500) }
+  // Over TCP: the image's init server listens only on the socket and answers before the database exists.
+  for (let attempt = 0; attempt < 90; attempt++) { if ((await run('docker', ['exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'keycloak', '-d', 'keycloak'])).code === 0) break; await setTimeout(500) }
   await docker(['exec', name, 'psql', '-U', 'keycloak', '-d', 'keycloak', '-c', "CREATE TABLE fixture(value text); INSERT INTO fixture VALUES ('restored');"])
   await streamCommand(['exec', name, 'pg_dump', '-U', 'keycloak', '-d', 'keycloak', '-Fc'], undefined, join(dir, 'postgres.dump'))
   await docker(['run', '-d', '--name', files, '--network', 'none', '-v', `${files}:/fixture`, 'node:22-bookworm-slim', 'tail', '-f', '/dev/null'])

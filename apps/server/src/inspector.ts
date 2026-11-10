@@ -1,9 +1,10 @@
-// Injected into every HTML page of the running app by the preview proxy. It talks to aForge through
+// Injected into every HTML page of the running app by the preview proxy. It talks to Reactor through
 // postMessage only: in "select" mode a click picks an element (Lovable-style annotations) instead of
 // reaching the app.
 export const INSPECTOR_JS = `(() => {
   if (window.__aforge) return;
   window.__aforge = true;
+  const parentOrigin = ${JSON.stringify(process.env.AFORGE_PUBLIC_URL ?? null)};
   let selecting = false;
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #007aff;background:rgba(0,122,255,.12);border-radius:4px;display:none;transition:all .06s';
@@ -36,7 +37,7 @@ export const INSPECTOR_JS = `(() => {
     tag.textContent = label;
   };
   const hide = () => { box.style.display = 'none'; tag.style.display = 'none'; };
-  const post = (msg) => parent.postMessage(Object.assign({ source: 'aforge-inspector' }, msg), '*');
+  const post = (msg) => parent.postMessage(Object.assign({ source: 'aforge-inspector' }, msg), parentOrigin || '*');
 
   addEventListener('mouseover', (e) => { if (selecting && e.target instanceof Element) show(e.target, e.target.tagName.toLowerCase()); }, true);
   addEventListener('click', (e) => {
@@ -46,6 +47,7 @@ export const INSPECTOR_JS = `(() => {
     post({ type: 'pick', selector: selectorOf(el), text: (el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 200), tag: el.tagName.toLowerCase(), route: location.pathname + location.search });
   }, true);
   addEventListener('message', (e) => {
+    if (e.source !== parent || (parentOrigin && e.origin !== parentOrigin)) return;
     const d = e.data || {};
     if (d.target !== 'aforge-inspector') return;
     if (d.type === 'mode') { selecting = !!d.select; document.documentElement.style.cursor = selecting ? 'crosshair' : ''; if (!selecting) hide(); }

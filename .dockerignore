@@ -1,0 +1,13 @@
+.git
+node_modules
+**/node_modules
+data
+.releases
+.env
+.env.*
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.test.ts
+**/*.test.tsx

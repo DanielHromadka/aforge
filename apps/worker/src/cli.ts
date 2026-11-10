@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 // aforge-worker: a daemon on a server with Claude Code and/or Codex logged in on a subscription. It
-// connects outwards to the relay, introduces itself to the aForge hub and runs the jobs it gets:
+// connects outwards to the relay, introduces itself to the Reactor hub and runs the jobs it gets:
 // structured consultations and implementations on a git bundle of the project's workspace.
 //
 //   aforge-worker enroll <token> [--name build-01] [--labels orchestrator,build] [--max-jobs 2]
@@ -14,7 +14,7 @@ import {
   Assembler, PROTOCOL_VERSION, chunksOf, open, parseEnrollment, randomId, roomUrl, seal,
   type Enrollment, type JobSpec, type RelayControl, type ToHub, type ToWorker,
 } from '@aforge/protocol'
-import { cloneBundle, commitAll, consultCli, createBundle, detectCapabilities, headOf, implement } from '@aforge/runner'
+import { cloneBundle, commitAll, consultCli, createBundle, detectCapabilities, headOf, implement, run, shutdownProcesses } from '@aforge/runner'
 
 interface Config {
   enrollment: Enrollment
@@ -43,13 +43,13 @@ const loadConfig = (): Config => {
 
 const enroll = (args: string[]) => {
   const token = args[0]
-  if (!token) throw new Error('Chybí registrační token z aForge (Agenti → Přidat worker).')
+  if (!token) throw new Error('Chybí registrační token z Reactoru (Agenti → Přidat worker).')
   const enrollment = parseEnrollment(token)
   const config: Config = {
     enrollment,
     name: flag(args, 'name') ?? hostname(),
     labels: (flag(args, 'labels') ?? '').split(',').map((l) => l.trim()).filter(Boolean),
-    maxJobs: Number(flag(args, 'max-jobs') ?? 1),
+    maxJobs: Math.min(16, Math.max(1, Math.floor(Number(flag(args, 'max-jobs') ?? 1)) || 1)),
   }
   mkdirSync(DIR, { recursive: true, mode: 0o700 })
   writeFileSync(CONFIG, JSON.stringify(config, null, 2))
@@ -65,14 +65,30 @@ interface RunningJob {
 
 const runDaemon = async () => {
   const config = loadConfig()
+  if (process.env.AFORGE_WORKER_JOBS_DIR) mkdirSync(process.env.AFORGE_WORKER_JOBS_DIR, { recursive: true, mode: 0o700 })
   const { enrollment: e } = config
+  if (process.env.NODE_ENV === 'production' && (process.env.AFORGE_AGENT_SANDBOX !== 'docker' || !process.env.AFORGE_EGRESS_PROXY)) throw new Error('Production worker requires Docker sandbox and an egress proxy.')
+  if (process.env.NODE_ENV === 'production' && !(await run('docker', ['info', '--format', '{{json .SecurityOptions}}'])).stdout.includes('rootless')) throw new Error('Production worker requires rootless Docker.')
+  if (process.env.NODE_ENV === 'production' && (await run('docker', ['info', '--format', '{{.CgroupVersion}} {{.MemoryLimit}} {{.CPUCfsQuota}} {{.PidsLimit}}'])).stdout.trim() !== '2 true true true') throw new Error('Worker requires enforced cgroups v2 limits.')
   const caps = await detectCapabilities()
   log(`Worker ${config.name} (${e.id}) · claude=${caps.claude} codex=${caps.codex} docker=${caps.docker} · štítky: ${config.labels.join(', ') || '—'}`)
   const jobs = new Map<string, RunningJob>()
   let retry = 1000
+  let stopping = false
+  let connection: WebSocket | undefined
+  const shutdown = async () => {
+    if (stopping) return
+    stopping = true; connection?.close()
+    for (const job of jobs.values()) job.cancel?.()
+    await shutdownProcesses()
+    process.exit(0)
+  }
+  process.once('SIGTERM', () => void shutdown()); process.once('SIGINT', () => void shutdown())
 
   const connect = () => {
+    if (stopping) return
     const ws = new WebSocket(roomUrl(e.relay, e.room, 'client'))
+    connection = ws
     ws.binaryType = 'arraybuffer'
     let session: string | null = null
     let helloNonce = ''
@@ -84,9 +100,9 @@ const runDaemon = async () => {
     const hello = () => {
       session = null
       helloNonce = randomId()
-      send({ t: 'hello', name: config.name, version: PROTOCOL_VERSION, caps, labels: config.labels, maxJobs: config.maxJobs, ts: Date.now(), wn: helloNonce })
+      send({ t: 'hello', name: config.name, version: PROTOCOL_VERSION, caps, labels: config.labels, maxJobs: config.maxJobs, telemetry: true, ts: Date.now(), wn: helloNonce })
     }
-    const event = (job: string, kind: string, text: string) => session && send({ t: 'event', s: session, job, kind, text })
+    const event = (job: string, kind: string, text: string, usage?: import('@aforge/shared').AgentUsage) => session && send({ t: 'event', s: session, job, kind, text, usage })
     const result = (job: string, ok: boolean, data?: unknown, error?: string) => {
       jobs.delete(job)
       if (session) send({ t: 'result', s: session, job, ok, data, error })
@@ -96,16 +112,16 @@ const runDaemon = async () => {
       log(`Úloha ${job}: ${spec.kind}`)
       try {
         if (spec.kind === 'consult') {
-          result(job, true, await consultCli(spec.system, spec.prompt, spec.schema))
+          result(job, true, await consultCli(spec.system, spec.prompt, spec.schema, (usage) => event(job, 'usage', '', usage), (kill) => { const current = jobs.get(job); if (current) current.cancel = kill }))
           return
         }
-        const tmp = await mkdtemp(join(tmpdir(), 'aforge-job-'))
+        const tmp = await mkdtemp(join(process.env.AFORGE_WORKER_JOBS_DIR ?? tmpdir(), 'aforge-job-'))
         try {
           await writeFile(join(tmp, 'in.bundle'), input!)
           const dir = join(tmp, 'ws')
           await cloneBundle(join(tmp, 'in.bundle'), dir)
           if ((await headOf(dir)) !== spec.base) throw new Error('Bundle neodpovídá očekávanému commitu')
-          const run = implement(spec.agent, dir, spec.prompt, (ev) => event(job, ev.kind, ev.text))
+          const run = implement(spec.agent, dir, spec.prompt, (ev) => event(job, ev.kind, ev.text, ev.usage))
           const current = jobs.get(job)
           if (current) current.cancel = run.kill
           const code = await run.done
@@ -158,6 +174,8 @@ const runDaemon = async () => {
       }
       if (!session || msg.s !== session) return
       if (msg.t === 'job') {
+        if (jobs.has(msg.job)) return
+        if (jobs.size >= config.maxJobs) { result(msg.job, false, undefined, 'Worker capacity exceeded'); return }
         jobs.set(msg.job, { spec: msg.spec, input: new Assembler() })
         if (msg.spec.kind === 'consult') void start(msg.job, msg.spec)
       }

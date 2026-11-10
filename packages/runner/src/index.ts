@@ -1,30 +1,44 @@
 // Running the agent CLIs headless, shared by the hub (local mode) and the worker daemon. Both use the
 // CLI's own login (subscription), so ANTHROPIC_API_KEY is not passed on unless asked for.
-import type { BuildEvent } from '@aforge/shared'
+import { sandboxEnabled, sandboxProcess } from './sandbox.js'
+import { watchCodexUsage } from './codex-usage.js'
+import { usageOf } from './usage.js'
+import type { AgentUsage, BuildEvent } from '@aforge/shared'
 import { run, streamLines, which } from './proc.js'
 
 export { run, streamLines, which } from './proc.js'
+export { usageOf } from './usage.js'
+export { createJobNetwork, removeJobNetwork, containerRestrictions, proxyArgs, sandboxProcess } from './sandbox.js'
+export { shutdownProcesses } from './proc.js'
 
 const cliEnv = () => ({ ...process.env, ANTHROPIC_API_KEY: process.env.AFORGE_PASS_API_KEY ? process.env.ANTHROPIC_API_KEY : undefined })
 
 /** One structured answer from Claude Code: no tools, the reply validated by the CLI against `schema`. */
-export const consultCli = async (system: string, prompt: string, schema: Record<string, unknown>): Promise<unknown> => {
-  const res = await run(
+export const consultCli = async (system: string, prompt: string, schema: Record<string, unknown>, onUsage?: (usage: AgentUsage) => void, onStart?: (kill: () => void) => void): Promise<unknown> => {
+  let out: { is_error?: boolean; result?: string; structured_output?: unknown } | undefined
+  let stderr = ''
+  const invoke = sandboxEnabled() || process.env.NODE_ENV === 'production' ? (cmd: string, args: string[], opts: { input: string; env?: NodeJS.ProcessEnv }, onLine: (line: string, stream: 'out' | 'err') => void) => sandboxProcess(cmd, args, undefined, opts.input, onLine) : streamLines
+  const job = invoke(
     'claude',
     [
-      '-p',
-      '--output-format', 'json',
-      '--tools', '',
-      '--no-session-persistence',
-      '--model', process.env.AFORGE_CLI_MODEL ?? 'opus',
-      '--system-prompt', system,
-      '--json-schema', JSON.stringify(schema),
+      '-p', '--output-format', 'stream-json', '--verbose', '--tools', '', '--no-session-persistence',
+      '--model', process.env.AFORGE_CLI_MODEL ?? 'opus', '--system-prompt', system, '--json-schema', JSON.stringify(schema),
     ],
     { input: prompt, env: cliEnv() },
+    (line, stream) => {
+      if (stream === 'err') { stderr = (stderr + line).slice(-2000); return }
+      try {
+        const raw = JSON.parse(line)
+        const usage = usageOf('claude', raw)
+        if (usage) onUsage?.(usage)
+        if (raw.type === 'result') out = raw
+      } catch { /* Non-JSON diagnostic lines are not structured answers. */ }
+    },
   )
-  if (res.code !== 0 && !res.stdout) throw new Error(`Claude Code skončil s chybou: ${res.stderr.slice(0, 600)}`)
-  const out = JSON.parse(res.stdout) as { is_error?: boolean; result?: string; structured_output?: unknown }
-  if (out.is_error) throw new Error(`Claude Code: ${out.result ?? 'neznámá chyba'}`)
+  onStart?.(job.kill)
+  const code = await job.done
+  if (!out) throw new Error(`Claude Code skončil bez odpovědi (kód ${code}): ${stderr.slice(0, 600)}`)
+  if (out.is_error || code !== 0) throw new Error(`Claude Code: ${out.result ?? stderr ?? 'neznámá chyba'}`)
   return out.structured_output ?? (typeof out.result === 'string' ? JSON.parse(out.result) : out.result)
 }
 
@@ -35,6 +49,10 @@ export const detectCapabilities = async () => {
     which('git'),
     run('docker', ['info', '--format', '{{.ServerVersion}}']).then((r) => r.code === 0),
   ])
+  if (sandboxEnabled() && docker) {
+    const available = (await run('docker', ['image', 'inspect', process.env.AFORGE_AGENT_IMAGE ?? 'reactor-agent:latest'])).code === 0
+    return { claude: available && Boolean(process.env.ANTHROPIC_API_KEY), codex: available && Boolean(process.env.OPENAI_API_KEY), git, docker }
+  }
   return { claude, codex, git, docker }
 }
 
@@ -89,24 +107,33 @@ const codexLine = (line: string): BuildEvent[] => {
 }
 
 export const implement = (agent: 'claude' | 'codex', cwd: string, prompt: string, onEvent: (e: BuildEvent) => void) => {
-  const onLine = (parse: (l: string) => BuildEvent[]) => (line: string, stream: 'out' | 'err') =>
-    stream === 'err' ? onEvent({ kind: 'log', text: line, at: now() }) : parse(line).forEach(onEvent)
+  const isolated = sandboxEnabled() || process.env.NODE_ENV === 'production'
+  const watcher = agent === 'codex' && !isolated ? watchCodexUsage((usage) => onEvent({ kind: 'usage', text: '', at: now(), usage })) : undefined
+  const onLine = (parse: (l: string) => BuildEvent[]) => (line: string, stream: 'out' | 'err') => {
+      if (stream === 'err') { onEvent({ kind: 'log', text: line, at: now() }); return }
+      try {
+        const raw = JSON.parse(line)
+        watcher?.line(raw)
+        const usage = usageOf(agent, raw)
+        if (usage) onEvent({ kind: 'usage', text: '', at: now(), usage })
+        if ((raw.type === 'result' && raw.is_error) || raw.type === 'turn.failed' || raw.type === 'error') onEvent({ kind: 'error', text: raw.result ?? raw.error?.message ?? raw.message ?? 'Agent nedokončil úlohu', at: now() })
+      } catch { /* Non-JSON lines are handled by the log parser. */ }
+      parse(line).forEach(onEvent)
+    }
   if (agent === 'codex') {
-    return streamLines('codex', ['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', '-C', cwd, prompt], { cwd }, onLine(codexLine))
+    const args = ['exec', '--json', ...(isolated ? ['--dangerously-bypass-approvals-and-sandbox', '-c', 'model_providers.openai.base_url="http://model-gateway:8080/v1"'] : ['--sandbox', 'workspace-write']), '--skip-git-repo-check', '-C', isolated ? '/workspace' : cwd, prompt]
+    const job = isolated ? sandboxProcess('codex', args, cwd, undefined, onLine(codexLine)) : streamLines('codex', args, { cwd }, onLine(codexLine))
+    return { kill: job.kill, done: job.done.finally(() => watcher?.stop()) }
   }
-  return streamLines(
-    'claude',
-    ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--allowedTools', ...CLAUDE_ALLOWED],
-    { cwd, env: cliEnv() },
-    onLine(claudeLine),
-  )
+  const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits', '--allowedTools', ...CLAUDE_ALLOWED]
+  return isolated ? sandboxProcess('claude', args, cwd, undefined, onLine(claudeLine)) : streamLines('claude', args, { cwd, env: cliEnv() }, onLine(claudeLine))
 }
 
 // ---- git bundles: how a workspace travels between the hub and a worker -----------------------
 
 const git = (cwd: string, args: string[]) => run('git', args, { cwd })
 
-const GIT_ID = ['-c', 'user.name=aForge', '-c', 'user.email=aforge@localhost']
+const GIT_ID = ['-c', 'user.name=Reactor', '-c', 'user.email=aforge@localhost']
 
 export const commitAll = async (cwd: string, message: string): Promise<string | null> => {
   await git(cwd, ['add', '-A'])

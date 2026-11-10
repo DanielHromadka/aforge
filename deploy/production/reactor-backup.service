@@ -1,0 +1,9 @@
+[Unit]
+Description=Consistent encrypted Reactor and Keycloak backup
+After=network-online.target
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/reactor/production.env
+EnvironmentFile=/etc/reactor/backup.env
+ExecStart=/opt/reactor/current/deploy/production/backup.sh
+UMask=0077

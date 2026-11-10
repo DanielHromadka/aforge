@@ -1,9 +1,10 @@
 // Preview: the app running in its container, shown in a browser frame. In select mode a click inside
 // the app picks the element (via the injected inspector) and the user attaches a note to it.
 import { useEffect, useRef, useState } from 'react'
-import type { Annotation } from '@aforge/shared'
-import { api, uid } from '../api'
+import { nextKeys, reposOf, type Annotation, type Issue } from '@aforge/shared'
+import { previewHref, api, uid } from '../api'
 import { Icon } from '../icons'
+import { ActionButton } from '../components/ActionButton'
 import { useStudio } from '../studio'
 
 interface Pick {
@@ -13,7 +14,7 @@ interface Pick {
   route: string
 }
 
-const STATE_LABEL = { idle: 'Neběží', starting: 'Spouští se', running: 'Běží', stopped: 'Zastaveno', error: 'Chyba' } as const
+export const STATE_LABEL = { idle: 'Neběží', starting: 'Spouští se', running: 'Běží', stopped: 'Zastaveno', error: 'Chyba' } as const
 
 export const PreviewStage = () => {
   const s = useStudio()
@@ -62,7 +63,15 @@ export const PreviewStage = () => {
       status: 'open',
       createdAt: new Date().toISOString(),
     }
-    s.update((p) => ({ ...p, annotations: [...p.annotations, a] }))
+    // Every annotation is also a bug, so it has an owner and a state like the rest of the work.
+    s.update((p) => {
+      const repo = reposOf(p).find((r) => r.platform === 'web') ?? reposOf(p)[0]!
+      const bug: Issue = {
+        id: nextKeys(p)[0]!, type: 'bug', title: a.comment.slice(0, 120), description: `Prvek \`${a.target}\` na \`${a.route}\` („${a.text.slice(0, 80)}“): ${a.comment}`,
+        layer: 'fe', repoId: repo.id, status: 'todo', source: 'annotation', annotationId: a.id, files: [], createdAt: a.createdAt, updatedAt: a.createdAt,
+      }
+      return { ...p, annotations: [...p.annotations, a], issues: [...(p.issues ?? []), bug] }
+    })
     setPick(null)
   }
 
@@ -77,18 +86,13 @@ export const PreviewStage = () => {
     <>
       <div className="pane-bar">
         <h2>Náhled</h2>
-        {preview.state === 'running' || preview.state === 'starting' ? (
-          <button className="btn" onClick={() => void api(`/projects/${project.id}/preview/stop`, { body: {} })}>
-            <Icon.stop /> Zastavit
-          </button>
-        ) : (
-          <button className="btn primary" onClick={() => void start()}>
-            <Icon.play /> Spustit v kontejneru
-          </button>
+        {preview.state !== 'running' && (
+          <ActionButton className="btn primary" busy={preview.state === 'starting'} busyLabel="Spouští se…" icon={<Icon.play />} onClick={start}>Spustit v kontejneru</ActionButton>
         )}
-        <button className="btn" disabled={preview.state === 'starting'} onClick={() => void start()} title="Znovu sestavit a spustit">
-          <Icon.refresh /> Restart
-        </button>
+        {(preview.state === 'running' || preview.state === 'starting') && (
+          <ActionButton busyLabel="Zastavuji…" icon={<Icon.stop />} onClick={() => api(`/projects/${project.id}/preview/stop`, { body: {} })}>Zastavit</ActionButton>
+        )}
+        {preview.state === 'running' && <ActionButton icon={<Icon.refresh />} busyLabel="Restartuji…" title="Znovu sestavit a spustit" onClick={start}>Restart</ActionButton>}
         <span className="chip gray">
           <span className={`dot ${preview.state === 'running' ? 'ok' : preview.state === 'starting' ? 'run' : preview.state === 'error' ? 'err' : ''}`} /> {STATE_LABEL[preview.state]}
         </span>
@@ -110,13 +114,13 @@ export const PreviewStage = () => {
               </button>
               <div className="browser-url">{preview.url ? `${preview.url}${route}` : 'aplikace neběží'}</div>
               {preview.url && (
-                <a className="tool-btn" href={preview.url} target="_blank" rel="noreferrer" title="Otevřít v novém okně">
+                <a className="tool-btn" href={previewHref(project.id, preview.url)} target="_blank" rel="noreferrer" title="Otevřít v novém okně">
                   ↗
                 </a>
               )}
             </div>
             {preview.url ? (
-              <iframe key={reloadKey} ref={frame} src={preview.url} title="Náhled aplikace" onLoad={() => postToApp({ type: 'mode', select: selecting })} />
+              <iframe sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-modals" key={reloadKey} ref={frame} src={previewHref(project.id, preview.url)} title="Náhled aplikace" onLoad={() => postToApp({ type: 'mode', select: selecting })} />
             ) : (
               <div className="empty">
                 <div>
@@ -184,7 +188,7 @@ export const PreviewStage = () => {
                 {a.status !== 'resolved' && (
                   <button className="btn small" onClick={(e) => {
                       e.stopPropagation()
-                      s.update((p) => ({ ...p, annotations: p.annotations.map((x) => (x.id === a.id ? { ...x, status: 'resolved' } : x)) }))
+                      s.update((p) => ({ ...p, annotations: p.annotations.map((x) => (x.id === a.id ? { ...x, status: 'resolved' } : x)), issues: (p.issues ?? []).map((i) => (i.annotationId === a.id ? { ...i, status: 'done', updatedAt: new Date().toISOString() } : i)) }))
                     }}
                   >
                     Vyřešeno

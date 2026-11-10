@@ -1,0 +1,36 @@
+# TLS terminates at a named Cloudflare Tunnel. All listeners are loopback only.
+{
+  admin 127.0.0.1:2019
+  auto_https off
+  servers {
+    trusted_proxies static 127.0.0.1/32 ::1/128
+    trusted_proxies_strict
+    client_ip_headers CF-Connecting-IP X-Forwarded-For
+  }
+}
+http://{$APP_HOST}:8088 {
+  bind 127.0.0.1
+  reverse_proxy 127.0.0.1:4310 {
+    header_up Host {$APP_HOST}
+    header_up X-Forwarded-Proto https
+    flush_interval -1
+    stream_close_delay 5m
+  }
+}
+http://{$AUTH_HOST}:8088 {
+  bind 127.0.0.1
+  @admin path /admin* /realms/master* /metrics* /health*
+  respond @admin 404
+  reverse_proxy 127.0.0.1:8080 {
+    header_up Host {$AUTH_HOST}
+    header_up X-Forwarded-Proto https
+  }
+}
+http://{$RELAY_HOST}:8088 {
+  bind 127.0.0.1
+  reverse_proxy 127.0.0.1:8787
+}
+http://*.{$AFORGE_PREVIEW_DOMAIN}:8088 {
+  bind 127.0.0.1
+  reverse_proxy 127.0.0.1:4312
+}

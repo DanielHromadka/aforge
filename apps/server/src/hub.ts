@@ -1,4 +1,4 @@
-// The hub: aForge's side of the relay. It holds the room secret, knows the enrolled workers and their
+// The hub: Reactor's side of the relay. It holds the room secret, knows the enrolled workers and their
 // keys, keeps one session per connected worker and hands out jobs by capability, label and load.
 // Config (secret, relay, mode, worker keys) lives in data/hub.json, readable by this server only.
 import { readFileSync, writeFileSync, renameSync, chmodSync } from 'node:fs'
@@ -8,8 +8,10 @@ import {
   peekWorker, randomId, roomOf, roomUrl, seal, splitConnection, withConnection,
   type Capabilities, type JobSpec, type RelayControl, type ToHub, type ToWorker,
 } from '@aforge/protocol'
+import { production } from './config.js'
 import type { BuildEvent, HubStatus } from '@aforge/shared'
 import { DATA_DIR } from './store.js'
+import { agentRuns, metrics } from './agent-runs.js'
 
 interface WorkerRecord {
   id: string
@@ -33,6 +35,7 @@ interface Session {
   caps: Capabilities
   labels: string[]
   maxJobs: number
+  telemetry: boolean
   running: Set<string>
   since: string
 }
@@ -67,6 +70,8 @@ class Hub {
   private jobs = new Map<string, Job>()
   private retry = 1000
   private ping?: NodeJS.Timeout
+  private stopped = false
+  private reconnectTimer?: NodeJS.Timeout
   private listeners = new Set<() => void>()
 
   constructor() {
@@ -74,7 +79,8 @@ class Hub {
   }
 
   private save() {
-    const tmp = `${CONFIG}.tmp`
+    // Unique per process: two processes (or test workers) saving at once must not share the temporary file.
+    const tmp = `${CONFIG}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`
     writeFileSync(tmp, JSON.stringify(this.config, null, 2))
     chmodSync(tmp, 0o600)
     renameSync(tmp, CONFIG)
@@ -100,6 +106,8 @@ class Hub {
       mode: this.config.mode,
       connected: this.connected,
       error: this.error,
+      runs: agentRuns.list(),
+      modelMetrics: metrics(),
       workers: this.config.workers.map((w) => {
         const s = online.get(w.id)
         return {
@@ -107,6 +115,7 @@ class Hub {
           name: s?.name ?? w.name,
           online: !!s,
           caps: s?.caps,
+          telemetry: s?.telemetry,
           labels: s?.labels ?? [],
           running: s?.running.size ?? 0,
           maxJobs: s?.maxJobs ?? 0,
@@ -119,6 +128,7 @@ class Hub {
 
   configure(patch: { relay?: string; mode?: 'local' | 'remote' }) {
     if (patch.relay !== undefined) {
+      if (production && !patch.relay.startsWith('wss://')) throw new Error('Produkce vyžaduje wss:// relay.')
       if (!/^wss?:\/\/[^\s]+$/.test(patch.relay)) throw new Error('Adresa relaye musí začínat ws:// nebo wss://')
       this.config.relay = patch.relay.replace(/\/+$/, '')
     }
@@ -133,7 +143,7 @@ class Hub {
     this.config.workers.push(record)
     this.save()
     this.changed()
-    return enrollmentToken({ v: PROTOCOL_VERSION, relay: this.config.relay, room: roomOf(this.config.secret), id: record.id, key: record.key, hub: 'aForge' })
+    return enrollmentToken({ v: PROTOCOL_VERSION, relay: this.config.relay, room: roomOf(this.config.secret), id: record.id, key: record.key, hub: 'Reactor' })
   }
 
   revoke(id: string) {
@@ -141,6 +151,17 @@ class Hub {
     this.save()
     for (const s of this.sessions.values()) if (s.worker === id) this.drop(s.c, 'revoked')
     this.changed()
+  }
+
+  stop() {
+    this.stopped = true; clearInterval(this.ping); clearTimeout(this.reconnectTimer)
+    for (const job of this.jobs.values()) {
+      const session = this.sessions.get(job.c)
+      if (session) this.sendTo(job.c, job.worker, { t: 'cancel', s: session.s, job: job.id })
+    }
+    this.ws?.close()
+    for (const job of this.jobs.values()) job.reject(new Error('Server se restartuje.'))
+    this.jobs.clear()
   }
 
   start() {
@@ -154,6 +175,7 @@ class Hub {
   }
 
   private connect() {
+    if (this.stopped) return
     if (this.ws && this.ws.readyState <= WebSocket.OPEN) return
     const url = roomUrl(this.config.relay, roomOf(this.config.secret), 'host')
     const ws = new WebSocket(url)
@@ -171,7 +193,7 @@ class Hub {
       if (e.code === 4003) this.error = 'Relay odmítl tajemství hubu'
       for (const c of [...this.sessions.keys()]) this.endSession(c, 'Spojení s relayem se přerušilo')
       this.changed()
-      setTimeout(() => this.connect(), this.retry)
+      this.reconnectTimer = setTimeout(() => this.connect(), this.retry)
       this.retry = Math.min(this.retry * 2, 30_000)
     }
   }
@@ -238,11 +260,12 @@ class Hub {
         caps: msg.caps,
         labels: (msg.labels ?? []).map(String).slice(0, 20),
         maxJobs: Math.max(1, Math.min(8, Number(msg.maxJobs) || 1)),
+        telemetry: msg.telemetry === true,
         running: new Set(),
         since: new Date().toISOString(),
       }
       this.sessions.set(c, session)
-      this.sendTo(c, opened.worker, { t: 'welcome', s: session.s, wn: msg.wn, hub: 'aForge' })
+      this.sendTo(c, opened.worker, { t: 'welcome', s: session.s, wn: msg.wn, hub: 'Reactor' })
       this.changed()
       return
     }
@@ -250,7 +273,7 @@ class Hub {
     if (!session || session.worker !== opened.worker || msg.s !== session.s) return this.drop(c, 'bad session')
     const job = this.jobs.get(msg.job)
     if (!job || job.c !== c) return
-    if (msg.t === 'event') job.onEvent?.({ kind: msg.kind, text: msg.text, at: new Date().toISOString() } as BuildEvent)
+    if (msg.t === 'event') job.onEvent?.({ kind: msg.kind, text: msg.text, usage: msg.usage, at: new Date().toISOString() } as BuildEvent)
     if (msg.t === 'chunk') {
       try {
         job.out ??= new Assembler()
@@ -290,16 +313,16 @@ class Hub {
    */
   async run(
     spec: JobSpec,
-    opts: { needs: keyof Capabilities; labels?: string[]; input?: Buffer; onEvent?: (e: BuildEvent) => void; waitMs?: number; signal?: AbortSignal },
+    opts: { needs: keyof Capabilities; runId?: string; labels?: string[]; input?: Buffer; onEvent?: (e: BuildEvent) => void; waitMs?: number; signal?: AbortSignal },
   ): Promise<unknown> {
     return (await this.runWithFile(spec, opts)).data
   }
 
   async runWithFile(
     spec: JobSpec,
-    opts: { needs: keyof Capabilities; labels?: string[]; input?: Buffer; onEvent?: (e: BuildEvent) => void; waitMs?: number; signal?: AbortSignal },
+    opts: { needs: keyof Capabilities; runId?: string; labels?: string[]; input?: Buffer; onEvent?: (e: BuildEvent) => void; waitMs?: number; signal?: AbortSignal },
   ): Promise<{ data: unknown; file?: Buffer }> {
-    if (!this.connected) throw new Error('aForge není připojený k relayi – zkontrolujte nastavení Agentů.')
+    if (!this.connected) throw new Error('Reactor není připojený k relayi – zkontrolujte nastavení Agentů.')
     let labels = opts.labels ?? []
     if (labels.length && !this.hasCandidate(opts.needs, labels)) labels = []
     const deadline = Date.now() + (opts.waitMs ?? 15 * 60_000)
@@ -313,14 +336,25 @@ class Hub {
       await new Promise((r) => setTimeout(r, 1500))
       session = this.pick(opts.needs, labels)
     }
+    if (opts.signal?.aborted) throw new Error('Úloha byla zrušena.')
     const id = randomId(9)
     const s = session
     s.running.add(id)
+    if (opts.runId) agentRuns.assign(opts.runId, s.worker, s.name)
     this.changed()
     opts.onEvent?.({ kind: 'log', text: `Úloha běží na workeru ${s.name}`, at: new Date().toISOString() })
     return new Promise((resolve, reject) => {
-      this.jobs.set(id, { id, c: s.c, worker: s.worker, onEvent: opts.onEvent, resolve, reject })
-      opts.signal?.addEventListener('abort', () => this.sendTo(s.c, s.worker, { t: 'cancel', s: s.s, job: id }))
+      const abort = () => {
+        this.sendTo(s.c, s.worker, { t: 'cancel', s: s.s, job: id })
+        const job = this.jobs.get(id); if (job) this.finish(s, job)
+        cleanup(); reject(new Error('Úloha byla zrušena nebo překročila časový limit.'))
+      }
+      const timer = setTimeout(abort, Number(process.env.AFORGE_JOB_TIMEOUT_MS ?? 30 * 60_000)); timer.unref()
+      const cleanup = () => { clearTimeout(timer); opts.signal?.removeEventListener('abort', abort) }
+      const completed = (value: { data: unknown; file?: Buffer }) => { cleanup(); resolve(value) }
+      const failed = (error: Error) => { cleanup(); reject(error) }
+      this.jobs.set(id, { id, c: s.c, worker: s.worker, onEvent: opts.onEvent, resolve: completed, reject: failed })
+      opts.signal?.addEventListener('abort', abort, { once: true })
       this.sendTo(s.c, s.worker, { t: 'job', s: s.s, job: id, spec })
       if (opts.input) for (const chunk of chunksOf(opts.input)) this.sendTo(s.c, s.worker, { t: 'chunk', s: s.s, job: id, ...chunk })
     })

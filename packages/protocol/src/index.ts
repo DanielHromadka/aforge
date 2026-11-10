@@ -1,4 +1,4 @@
-// Wire format between the aForge hub (host), the relay and the worker daemons (clients). The framing
+// Wire format between the Reactor hub (host), the relay and the worker daemons (clients). The framing
 // follows aFinder's companion relay:
 //
 //   relay ⇄ host:   binary = [connection id u32][payload], both ways;  text = RelayControl JSON
@@ -78,7 +78,7 @@ const TOKEN_PREFIX = 'afw1.'
 export const enrollmentToken = (e: Enrollment) => TOKEN_PREFIX + b64url(Buffer.from(JSON.stringify(e)))
 
 export const parseEnrollment = (token: string): Enrollment => {
-  if (!token.startsWith(TOKEN_PREFIX)) throw new Error('Not an aForge worker token')
+  if (!token.startsWith(TOKEN_PREFIX)) throw new Error('Not an Reactor worker token')
   const e = JSON.parse(Buffer.from(token.slice(TOKEN_PREFIX.length), 'base64url').toString('utf8')) as Enrollment
   if (e.v !== PROTOCOL_VERSION || !ROOM_RE.test(e.room) || !WORKER_ID_RE.test(e.id) || fromB64url(e.key).length !== 32) throw new Error('Invalid token')
   if (!/^wss?:\/\//.test(e.relay)) throw new Error('Invalid relay address')
@@ -146,8 +146,8 @@ export type JobSpec =
 
 /** Worker → hub. Everything after hello carries the session id from the hub's welcome. */
 export type ToHub =
-  | { t: 'hello'; name: string; version: number; caps: Capabilities; labels: string[]; maxJobs: number; ts: number; wn: string }
-  | { t: 'event'; s: string; job: string; kind: string; text: string }
+  | { t: 'hello'; name: string; version: number; caps: Capabilities; labels: string[]; maxJobs: number; ts: number; wn: string; telemetry?: boolean }
+  | { t: 'event'; s: string; job: string; kind: string; text: string; usage?: import('@aforge/shared').AgentUsage }
   | { t: 'chunk'; s: string; job: string; seq: number; data: string; last: boolean }
   | { t: 'result'; s: string; job: string; ok: boolean; data?: unknown; error?: string }
 

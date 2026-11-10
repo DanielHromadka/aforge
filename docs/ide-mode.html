@@ -1,0 +1,736 @@
+<title>Agentní IDE</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one reading column for the argument, wide framed mockups of the real app in Reactor's own clean Finder look. */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  --display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --window: #f7f8fa; --content: #ffffff; --label: rgba(0,0,0,.86); --label-2: rgba(0,0,0,.52); --label-3: rgba(0,0,0,.28);
+  --separator: rgba(0,0,0,.07); --control: rgba(0,0,0,.05); --control-2: rgba(0,0,0,.09);
+  --accent: #007aff; --accent-soft: rgba(0,122,255,.12);
+  --ring: 0 0 0 1px rgba(0,0,0,.05), 0 1px 3px rgba(0,0,0,.05);
+  --lift: 0 0 0 1px rgba(0,0,0,.05), 0 12px 40px rgba(20,30,60,.10);
+  /* one hue per stage of work, the same everywhere */
+  --c-design: #af52de; --c-story: #007aff; --c-split: #30b0c7; --c-fe: #5e5ce6; --c-be: #ff9500; --c-preview: #28cd41; --c-test: #ff2d55; --c-wiki: #a2845e;
+  --t-epic: #904ee2; --t-story: #63ba3c; --t-task: #4bade8; --t-bug: #e5493a; --t-sub: #4bade8;
+  --ok: #28a745; --warn: #f29900; --err: #ff3b30; --run: #007aff;
+  --term: #1e1e20; --term-fg: #e8e8ea;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --window: #161618; --content: #1f1f22; --label: rgba(255,255,255,.88); --label-2: rgba(255,255,255,.56); --label-3: rgba(255,255,255,.28);
+  --separator: rgba(255,255,255,.07); --control: rgba(255,255,255,.07); --control-2: rgba(255,255,255,.12);
+  --accent: #0a84ff; --accent-soft: rgba(10,132,255,.22);
+  --ring: 0 0 0 1px rgba(255,255,255,.06), 0 1px 3px rgba(0,0,0,.4); --lift: 0 0 0 1px rgba(255,255,255,.07), 0 12px 40px rgba(0,0,0,.5);
+  --c-design: #bf5af2; --c-story: #0a84ff; --c-split: #40c8e0; --c-fe: #7d7aff; --c-be: #ff9f0a; --c-preview: #32d74b; --c-test: #ff375f; --c-wiki: #b59469;
+  --t-epic: #a46ef0; --t-story: #74c94b; --t-task: #5cb9ee; --t-bug: #f0614f; --t-sub: #5cb9ee;
+  --ok: #32d74b; --warn: #ffb340; --err: #ff453a; --run: #0a84ff; --term: #111113;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --window: #161618; --content: #1f1f22; --label: rgba(255,255,255,.88); --label-2: rgba(255,255,255,.56); --label-3: rgba(255,255,255,.28);
+  --separator: rgba(255,255,255,.07); --control: rgba(255,255,255,.07); --control-2: rgba(255,255,255,.12);
+  --accent: #0a84ff; --accent-soft: rgba(10,132,255,.22);
+  --ring: 0 0 0 1px rgba(255,255,255,.06), 0 1px 3px rgba(0,0,0,.4); --lift: 0 0 0 1px rgba(255,255,255,.07), 0 12px 40px rgba(0,0,0,.5);
+  --c-design: #bf5af2; --c-story: #0a84ff; --c-split: #40c8e0; --c-fe: #7d7aff; --c-be: #ff9f0a; --c-preview: #32d74b; --c-test: #ff375f; --c-wiki: #b59469;
+  --t-epic: #a46ef0; --t-story: #74c94b; --t-task: #5cb9ee; --t-bug: #f0614f; --t-sub: #5cb9ee;
+  --ok: #32d74b; --warn: #ffb340; --err: #ff453a; --run: #0a84ff; --term: #111113;
+  color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--window); color: var(--label); font: 15px/1.55 var(--font); -webkit-font-smoothing: antialiased; letter-spacing: -.1px }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 56px 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 72px }
+.prose { max-width: 680px; display: flex; flex-direction: column; gap: 14px }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.05; letter-spacing: -1.2px; font-weight: 700 }
+h2 { font-size: 26px; letter-spacing: -.5px; font-weight: 700 }
+h3 { font-size: 16px; font-weight: 600; letter-spacing: -.2px }
+p { margin: 0 }
+.lead { font-size: 18px; color: var(--label-2); line-height: 1.5 }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--label-2) }
+.muted { color: var(--label-2) }
+section { display: flex; flex-direction: column; gap: 22px }
+svg.i { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round }
+
+/* verdict */
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px }
+.verdict > div { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.verdict b { font-size: 15px }
+.verdict p { font-size: 14px; color: var(--label-2) }
+
+/* the flow of work */
+.flow { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0; background: var(--content); border-radius: 16px; box-shadow: var(--ring); padding: 22px 14px }
+.stage { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; position: relative; padding: 0 6px }
+.stage + .stage::before { content: ""; position: absolute; top: 21px; right: calc(50% + 26px); width: calc(100% - 52px); height: 2px; border-radius: 1px; background: var(--separator) }
+.tile { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: var(--tone) }
+.tile svg.i { width: 22px; height: 22px; stroke-width: 1.6 }
+.stage b { font-size: 13.5px }
+.stage span { font-size: 12px; color: var(--label-2); line-height: 1.35 }
+.stage .who { font-size: 11.5px; color: var(--tone); font-weight: 600 }
+@media (max-width: 860px) { .flow { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 22px } .stage + .stage::before { display: none } }
+@media (max-width: 480px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+
+/* agents team */
+.team { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px }
+.agent { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px; display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 4px 12px; align-items: start }
+.agent .tile { width: 40px; height: 40px; grid-row: span 2 }
+.agent .tile svg.i { width: 20px; height: 20px }
+.agent p { font-size: 13px; color: var(--label-2); line-height: 1.4 }
+
+/* status glyphs */
+.states { display: flex; flex-wrap: wrap; gap: 10px 22px; background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px 20px }
+.state { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px }
+.st { width: 16px; height: 16px; flex: 0 0 auto; display: inline-block; color: var(--label-3) }
+.st svg { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round }
+.st.run { color: var(--run) } .st.ok { color: var(--ok) } .st.wait { color: var(--warn) } .st.err { color: var(--err) } .st.block { color: var(--label-2) }
+.st.run svg { animation: spin 1.6s linear infinite }
+@keyframes spin { to { transform: rotate(360deg) } }
+@media (prefers-reduced-motion: reduce) { .st.run svg, .pulse { animation: none !important } }
+
+/* mockups */
+.tabs { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--control); align-self: flex-start; flex-wrap: wrap }
+.tabs button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--label); padding: 6px 12px; border-radius: 8px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center }
+.tabs button[aria-selected="true"] { background: var(--content); box-shadow: var(--ring); font-weight: 600 }
+.tabs button:focus-visible, .tabs button:hover { outline: none; background: var(--content) }
+.caption { max-width: 680px; color: var(--label-2); font-size: 14px }
+.scroller { overflow-x: auto; border-radius: 18px; -webkit-overflow-scrolling: touch }
+.app { min-width: 1040px; background: var(--window); border-radius: 18px; box-shadow: var(--lift); padding: 8px; display: grid; grid-template-rows: 48px minmax(0,1fr); gap: 8px; font-size: 13px; letter-spacing: -.08px; line-height: 1.35 }
+.card { background: var(--content); border-radius: 12px; box-shadow: var(--ring); min-width: 0 }
+.top { display: flex; align-items: center; gap: 10px; padding: 0 10px }
+.top .name { display: flex; flex-direction: column; line-height: 1.2; margin-right: 6px } .top .name small { color: var(--label-2); font-size: 11px }
+.iconbtn { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--label-2) }
+.ladder { display: flex; align-items: center; margin: 0 auto }
+.rung { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 15px; color: var(--label-2) }
+.rung .dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--control-2); color: var(--label) }
+.rung .dot svg.i { width: 13px; height: 13px; stroke-width: 1.8 }
+.rung.done .dot { background: var(--tone); color: #fff }
+.rung.now { background: var(--accent-soft); color: var(--accent); font-weight: 600 }
+.rung.now .dot { background: var(--tone); color: #fff }
+.link { width: 14px; height: 2px; background: var(--separator); border-radius: 1px }
+.link.done { background: var(--label-3) }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 8px; background: var(--control); font-weight: 500; white-space: nowrap }
+.btn.primary { background: var(--accent); color: #fff }
+.body { display: grid; gap: 8px; min-height: 0 }
+.pane { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+.pane h4 { margin: 0; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px }
+.pane h4 .muted { font-weight: 400 }
+.side { padding: 10px 8px; display: flex; flex-direction: column; gap: 2px }
+.nav { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 7px; color: var(--label) }
+.nav svg.i { color: var(--tone, var(--accent)) }
+.nav.cur { background: var(--accent-soft); color: var(--accent); font-weight: 600 }
+.nav .n { margin-left: auto; color: var(--label-2); font-size: 12px; font-variant-numeric: tabular-nums }
+.navhead { font-size: 11px; font-weight: 600; color: var(--label-2); padding: 12px 8px 4px }
+.mini { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: #fff; background: var(--tone); flex: 0 0 auto }
+.mini svg.i { width: 13px; height: 13px; stroke-width: 1.8 }
+.row { display: flex; align-items: center; gap: 10px; min-width: 0 }
+.grow { flex: 1; min-width: 0 }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.small { font-size: 11.5px; color: var(--label-2) }
+.num { font-variant-numeric: tabular-nums }
+
+/* cockpit */
+.pipe { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 8px }
+.pipe > div { border-radius: 10px; background: var(--window); padding: 12px; display: flex; flex-direction: column; gap: 8px }
+.pipe .big { font-size: 22px; font-weight: 700; letter-spacing: -.5px; font-variant-numeric: tabular-nums }
+.bar { height: 4px; border-radius: 2px; background: var(--control-2); overflow: hidden } .bar i { display: block; height: 100%; background: var(--tone); border-radius: 2px }
+.attn { display: flex; flex-direction: column; gap: 2px }
+.attn .row { padding: 8px; border-radius: 8px }
+.attn .row:hover { background: var(--window) }
+.crew { display: flex; flex-direction: column; gap: 10px }
+.pulse { animation: pulse 1.4s ease-in-out infinite } @keyframes pulse { 50% { opacity: .35 } }
+
+/* board */
+.cols { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; padding: 14px }
+.col { display: flex; flex-direction: column; gap: 8px; min-width: 0 }
+.colhead { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 2px 4px }
+.colhead .n { color: var(--label-2); font-weight: 400 }
+.story { background: var(--content); border-radius: 10px; box-shadow: var(--ring); padding: 10px; display: flex; flex-direction: column; gap: 8px }
+.story.sel { box-shadow: 0 0 0 2px var(--accent) }
+.thumb { height: 54px; border-radius: 6px; background: var(--window); position: relative; overflow: hidden }
+.thumb i { position: absolute; border-radius: 3px; background: var(--control-2) }
+.trail { display: flex; align-items: center; gap: 4px }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px 0 4px; border-radius: 6px; background: var(--window); font-size: 11px; color: var(--label-2) }
+.chip .tone { width: 14px; height: 14px; border-radius: 4px; display: grid; place-items: center; color: #fff; background: var(--tone) }
+.chip .tone svg.i { width: 9px; height: 9px; stroke-width: 2.2 }
+.chip .st, .chip .st svg { width: 12px; height: 12px }
+.who-av { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--tone); margin-left: auto }
+.who-av svg.i { width: 11px; height: 11px; stroke-width: 2 }
+
+/* story detail */
+.crit { display: flex; flex-direction: column; gap: 2px }
+.crit .row { align-items: flex-start; padding: 7px 8px; border-radius: 8px; background: var(--window) }
+.crit .row + .row { margin-top: 4px }
+.crit p { font-size: 12.5px; line-height: 1.4 }
+.task { display: grid; grid-template-columns: 22px minmax(0,1fr) auto; gap: 4px 10px; align-items: center; padding: 10px; border-radius: 10px; background: var(--window) }
+.task .files { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px }
+.file { font: 11px var(--mono); color: var(--label-2); background: var(--content); border-radius: 5px; padding: 2px 6px }
+.frame { border-radius: 10px; background: var(--window); padding: 12px; display: flex; flex-direction: column; gap: 8px; position: relative; height: 200px }
+.frame i { display: block; border-radius: 4px; background: var(--control-2) }
+.frame .mark { position: absolute; border: 1.5px solid var(--c-design); border-radius: 6px; background: transparent }
+.frame .tag { position: absolute; font-size: 10.5px; font-weight: 600; color: #fff; background: var(--c-design); border-radius: 4px; padding: 1px 5px }
+
+/* agent at work */
+.timeline { display: flex; flex-direction: column; gap: 0; padding-left: 4px }
+.ev { display: grid; grid-template-columns: 24px minmax(0,1fr) auto; gap: 10px; align-items: start; position: relative; padding-bottom: 14px }
+.ev::before { content: ""; position: absolute; left: 11px; top: 24px; bottom: 0; width: 2px; background: var(--separator) }
+.ev:last-child::before { display: none }
+.ev .k { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--window); color: var(--label-2) }
+.ev .k svg.i { width: 13px; height: 13px }
+.ev b { font-weight: 600 } .ev .small { margin-top: 2px }
+.term { background: var(--term); color: var(--term-fg); font: 11.5px/1.6 var(--mono); border-radius: 10px; padding: 10px 12px; white-space: pre; overflow: hidden }
+.term .g { color: #6fdc8c } .term .r { color: #ff8a80 } .term .d { color: #9a9aa2 }
+.proposal { border-radius: 12px; background: var(--window); padding: 14px; display: flex; flex-direction: column; gap: 10px }
+.diffrow { display: flex; align-items: center; gap: 8px; font: 12px var(--mono) }
+.diffrow .plus { color: var(--ok) } .diffrow .minus { color: var(--err) }
+.thread { display: flex; flex-direction: column; gap: 8px }
+.bubble { border-radius: 12px; padding: 8px 11px; max-width: 88%; font-size: 12.5px; line-height: 1.4 }
+.bubble.me { align-self: flex-end; background: var(--accent); color: #fff }
+.bubble.ai { background: var(--window) }
+.composer { display: flex; align-items: center; gap: 8px; height: 36px; border-radius: 10px; background: var(--window); padding: 0 6px 0 12px; color: var(--label-3) }
+.send { margin-left: auto; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; color: #fff }
+.send svg.i { width: 12px; height: 12px; stroke-width: 2 }
+
+/* issue types, as in Jira */
+.type { width: 16px; height: 16px; border-radius: 4px; display: inline-grid; place-items: center; color: #fff; background: var(--ty); flex: 0 0 auto }
+.type svg.i { width: 12px; height: 12px; stroke-width: 2.1 }
+.type.ty-epic { --ty: var(--t-epic) } .type.ty-story { --ty: var(--t-story) } .type.ty-task { --ty: var(--t-task) } .type.ty-bug { --ty: var(--t-bug) } .type.ty-sub { --ty: var(--t-sub) }
+.key { font: 600 11.5px var(--mono); color: var(--label-2); letter-spacing: 0 }
+.tree { background: var(--content); border-radius: 16px; box-shadow: var(--ring); padding: 18px 20px; display: flex; flex-direction: column; gap: 2px; overflow-x: auto }
+.node { display: grid; grid-template-columns: 16px auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; min-width: 520px }
+.node:hover { background: var(--window) }
+.node .src { font-size: 12px; color: var(--label-2); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap }
+.node .src .mini { width: 18px; height: 18px; border-radius: 5px } .node .src .mini svg.i { width: 11px; height: 11px }
+.l1 { margin-left: 26px } .l2 { margin-left: 52px }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px }
+.rules > div { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--label-2) }
+.rules b { color: var(--label) }
+.lane { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; font-weight: 600 }
+.lane .small { font-weight: 400 }
+.lane .bar { width: 120px; margin-left: 6px; --tone: var(--t-epic) }
+.crumb { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--label-2) }
+
+/* wiki */
+.wikitree { display: flex; flex-direction: column; gap: 2px; padding: 12px 8px }
+.wikitree .nav { height: 28px }
+.wikitree .nav.l1 { margin-left: 18px }
+.doc { padding: 26px 34px; display: flex; flex-direction: column; gap: 14px; max-width: 720px; font-size: 14px; line-height: 1.55 }
+.doc h5 { margin: 0; font: 700 24px/1.15 var(--display); letter-spacing: -.5px }
+.doc h6 { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--label-2) }
+.doc ul, .doc ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 3px }
+.doc .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--label-2) }
+.doc .meta span { display: inline-flex; align-items: center; gap: 5px }
+.changes { border-radius: 10px; background: var(--window); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px }
+
+/* repositories */
+.repos { display: grid; grid-template-columns: minmax(0,1fr) 220px minmax(0,1fr); gap: 12px; align-items: stretch }
+.repo { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0 }
+.repo .row b { font-size: 14px }
+.repo .file { align-self: flex-start }
+.contract { border-radius: 14px; border: 1.5px dashed var(--c-split); padding: 16px; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; text-align: center; font-size: 13px; color: var(--label-2) }
+.contract b { color: var(--label) }
+@media (max-width: 760px) { .repos { grid-template-columns: minmax(0,1fr) } }
+.repostack { display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+.platforms { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px }
+.platform { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0 }
+.platform .tile { width: 36px; height: 36px; border-radius: 10px } .platform .tile svg.i { width: 18px; height: 18px }
+.platform dl { margin: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 10px; font-size: 12.5px }
+.platform dt { color: var(--label-2) } .platform dd { margin: 0 }
+.decided { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px }
+.decided > div { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px }
+.decided .row { gap: 8px }
+.decided p { font-size: 13.5px; color: var(--label-2) }
+
+/* compare + plan */
+.tablewrap { overflow-x: auto; background: var(--content); border-radius: 14px; box-shadow: var(--ring) }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 14px }
+th, td { text-align: left; padding: 12px 16px; vertical-align: top }
+th { font-size: 12px; color: var(--label-2); font-weight: 600 }
+tbody tr + tr td { border-top: 1px solid var(--separator) }
+td:first-child { font-weight: 600; width: 22% }
+td:nth-child(2) { color: var(--label-2) }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; counter-reset: s }
+.steps > div { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; counter-increment: s }
+.steps > div::before { content: counter(s); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--accent-soft); color: var(--accent) }
+.steps p { font-size: 13.5px; color: var(--label-2) }
+code { font: 13px var(--mono); background: var(--control); padding: 1px 5px; border-radius: 4px }
+.qs { display: flex; flex-direction: column; gap: 10px; max-width: 760px; margin: 0; padding-left: 20px }
+.qs li { padding-left: 4px }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-design" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M2 5.5h12M5 8.5h3M5 11h6"/></symbol>
+  <symbol id="i-story" viewBox="0 0 16 16"><path d="M4 2.5h6l2.5 2.5v8.5H4z"/><path d="M6 7h4.5M6 9.5h4.5M6 12h2.5"/></symbol>
+  <symbol id="i-split" viewBox="0 0 16 16"><path d="M8 2v4M8 6 4 10v3.5M8 6l4 4v3.5"/><circle cx="8" cy="2.5" r=".6"/></symbol>
+  <symbol id="i-fe" viewBox="0 0 16 16"><rect x="1.8" y="3" width="12.4" height="9" rx="1.6"/><path d="M5.5 14h5M6 6.3 4.5 7.5 6 8.7M10 6.3l1.5 1.2L10 8.7"/></symbol>
+  <symbol id="i-be" viewBox="0 0 16 16"><ellipse cx="8" cy="3.8" rx="5" ry="1.8"/><path d="M3 3.8v8.4c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V3.8M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8"/></symbol>
+  <symbol id="i-preview" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></symbol>
+  <symbol id="i-test" viewBox="0 0 16 16"><path d="M6 2h4M6.8 2v4.2L3 12.6A1 1 0 0 0 3.9 14h8.2a1 1 0 0 0 .9-1.4L9.2 6.2V2"/><path d="M4.6 10h6.8"/></symbol>
+  <symbol id="i-done" viewBox="0 0 16 16"><path d="M8 1.8 13.5 4v4c0 3.2-2.4 5.4-5.5 6.2C4.9 13.4 2.5 11.2 2.5 8V4z"/><path d="m5.6 8 1.7 1.7 3.2-3.4"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 16 16"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 16 16"><path d="M7 2.5 8.2 6 11.5 7.2 8.2 8.4 7 12 5.8 8.4 2.5 7.2 5.8 6z"/><path d="M12 10.5v3M10.5 12h3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.5v9l7-4.5z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3.5 8.5 3 3 6-7"/></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 2h5.5L12 4.5V14H4z"/><path d="M9.5 2v2.5H12"/></symbol>
+  <symbol id="i-term" viewBox="0 0 16 16"><rect x="1.8" y="2.5" width="12.4" height="11" rx="1.8"/><path d="m4.5 6.5 2 1.5-2 1.5M8 10h3.5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3.3 3.3"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="9" width="4.5" height="4.5" rx="1.2"/></symbol>
+  <symbol id="i-board" viewBox="0 0 16 16"><rect x="2" y="2.5" width="3.4" height="11" rx="1"/><rect x="6.3" y="2.5" width="3.4" height="7" rx="1"/><rect x="10.6" y="2.5" width="3.4" height="9" rx="1"/></symbol>
+  <symbol id="i-code" viewBox="0 0 16 16"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></symbol>
+  <symbol id="i-api" viewBox="0 0 16 16"><path d="M5 4.5c-1.5 0-1.5 1-1.5 2S3 8 2 8c1 0 1.5.5 1.5 1.5s0 2 1.5 2M11 4.5c1.5 0 1.5 1 1.5 2S13 8 14 8c-1 0-1.5.5-1.5 1.5s0 2-1.5 2"/><path d="M6.5 8h3"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 16 16"><rect x="4.5" y="1.5" width="7" height="13" rx="1.8"/><path d="M7 12.5h2"/></symbol>
+  <symbol id="i-desktop" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11v3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 1.7 2.6 3.7 2.6 6S9.8 12.3 8 14C6.2 12.3 5.4 10.3 5.4 8S6.2 3.7 8 2z"/></symbol>
+  <symbol id="i-box" viewBox="0 0 16 16"><path d="M8 1.8 13.5 4.6v6.8L8 14.2l-5.5-2.8V4.6z"/><path d="M2.5 4.6 8 7.4l5.5-2.8M8 7.4v6.8"/></symbol>
+  <symbol id="i-wiki" viewBox="0 0 16 16"><path d="M2.5 3.2c2-.8 3.8-.6 5.5.6v9.7c-1.7-1.2-3.5-1.4-5.5-.6z"/><path d="M13.5 3.2c-2-.8-3.8-.6-5.5.6v9.7c1.7-1.2 3.5-1.4 5.5-.6z"/></symbol>
+  <symbol id="i-repo" viewBox="0 0 16 16"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="6" r="1.5"/><path d="M4.5 5v6M11.5 7.5c0 2.5-3 2.5-7 3.5"/></symbol>
+  <symbol id="t-epic" viewBox="0 0 16 16"><path d="M9.2 1.8 4.2 9h3.6l-1 5.2 5-7.2H8.2z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="t-story" viewBox="0 0 16 16"><path d="M4.5 2.5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v12L8 11.8l-3.5 2.7z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="t-task" viewBox="0 0 16 16"><path d="m3.6 8.4 2.9 2.9 6-6.6" stroke-width="2.4"/></symbol>
+  <symbol id="t-bug" viewBox="0 0 16 16"><path d="M6.2 3.2 5 2M9.8 3.2 11 2M3 7.2h2M11 7.2h2M3 10.4h2M11 10.4h2M3.6 13.4 5.3 12M12.4 13.4 10.7 12" stroke-width="1.6"/><path d="M8 2.8c1.3 0 2.2.8 2.3 1.9H5.7C5.8 3.6 6.7 2.8 8 2.8z" fill="currentColor" stroke="none"/><path d="M8 5.4c1.9 0 3.2 1.7 3.2 4.1S9.9 14 8 14s-3.2-2.1-3.2-4.5S6.1 5.4 8 5.4z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="t-sub" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="none" stroke-width="2"/></symbol>
+  <symbol id="s-todo" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/></symbol>
+  <symbol id="s-run" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" opacity=".25"/><path d="M8 2a6 6 0 0 1 6 6"/></symbol>
+  <symbol id="s-wait" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.3M8 10.8v.2"/></symbol>
+  <symbol id="s-ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="m5.3 8.2 1.8 1.8 3.6-3.8"/></symbol>
+  <symbol id="s-err" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="m6 6 4 4M10 6l-4 4"/></symbol>
+  <symbol id="s-block" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/></symbol>
+</svg>
+<style>
+/* Agentní IDE: Cursor-like editor + BridgeSpace-like agent grid, with the backlog and wiki written quietly behind it. */
+.seg { display: flex; background: var(--control); border-radius: 8px; padding: 2px; gap: 2px }
+.seg span { padding: 3px 10px; border-radius: 6px; color: var(--label-2); display: inline-flex; align-items: center; gap: 5px }
+.seg .on { background: var(--content); color: var(--label); box-shadow: var(--ring); font-weight: 600 }
+.ide { grid-template-rows: 48px minmax(0,1fr) 30px }
+.ide-body { display: grid; grid-template-columns: 210px minmax(0,1fr) 330px; gap: 8px; height: 640px; min-height: 0 }
+.ide-center { display: grid; grid-template-rows: minmax(0,1fr) 230px; gap: 8px; min-height: 0 }
+.xtabs { display: flex; gap: 2px; padding: 8px 8px 4px }
+.xtabs span { flex: 1; height: 26px; border-radius: 6px; display: grid; place-items: center; color: var(--label-2) }
+.xtabs .on { background: var(--accent-soft); color: var(--accent) }
+.ftree { display: flex; flex-direction: column; padding: 4px 8px; font-size: 12.5px }
+.ftree div { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 6px; border-radius: 6px }
+.ftree .cur { background: var(--accent-soft); color: var(--accent); font-weight: 600 }
+.ftree .d1 { padding-left: 20px } .ftree .d2 { padding-left: 34px }
+.ftree .m { margin-left: auto; font: 600 10px var(--mono); color: var(--warn) } .ftree .a { color: var(--ok) }
+.ftree svg.i { width: 14px; height: 14px; color: var(--label-2) }
+.etabs { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; font-size: 12px }
+.etabs span { padding: 5px 10px; border-radius: 7px 7px 0 0; color: var(--label-2); display: inline-flex; gap: 6px; align-items: center }
+.etabs .on { background: var(--window); color: var(--label); font-weight: 600 }
+.code { margin: 0 8px 8px; background: var(--window); border-radius: 0 10px 10px 10px; font: 12px/1.75 var(--mono); padding: 10px 0; overflow: hidden; position: relative }
+.code div { display: grid; grid-template-columns: 42px minmax(0,1fr); white-space: pre }
+.code div > i { font-style: normal; color: var(--label-3); text-align: right; padding-right: 14px }
+.code .add { background: color-mix(in srgb, var(--ok) 13%, transparent) }
+.code .del { background: color-mix(in srgb, var(--err) 11%, transparent); text-decoration: line-through; color: var(--label-2) }
+.code .kw { color: var(--c-design) } .code .st { color: var(--c-be) } .code .fn { color: var(--c-fe) } .code .cm { color: var(--label-3) }
+.inline-ask { position: absolute; left: 70px; bottom: 14px; width: 420px; background: var(--content); border-radius: 10px; box-shadow: var(--lift); padding: 8px 10px; font: 12.5px var(--font); display: flex; align-items: center; gap: 8px }
+.inline-ask kbd, kbd { font: 600 10.5px var(--mono); background: var(--control-2); border-radius: 4px; padding: 1px 5px; color: var(--label-2) }
+.grid-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 0; font-weight: 600 }
+.agrid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; padding: 8px; min-height: 0; height: calc(100% - 34px) }
+.apane { background: var(--window); border-radius: 10px; display: flex; flex-direction: column; min-width: 0; overflow: hidden }
+.apane.focus { box-shadow: 0 0 0 2px var(--accent) }
+.apane header { display: flex; align-items: center; gap: 7px; padding: 7px 9px; font-size: 12px }
+.apane header .small { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0 } .apane header b { white-space: nowrap }
+.apane .term { border-radius: 0; flex: 1; font-size: 10.5px; line-height: 1.55; padding: 8px 10px }
+.meter { height: 3px; background: var(--control-2) } .meter i { display: block; height: 100%; background: var(--tone) }
+.comp { display: flex; flex-direction: column; min-height: 0 }
+.comp .thread { flex: 1; padding: 12px; overflow: hidden }
+.ctx { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px 8px }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 5px; border-radius: 11px; background: var(--window); font-size: 11.5px; color: var(--label-2) }
+.pill .type { width: 14px; height: 14px } .pill .type svg.i { width: 10px; height: 10px }
+.composer2 { margin: 0 10px 10px; border-radius: 12px; background: var(--window); padding: 10px 10px 8px 12px; display: flex; flex-direction: column; gap: 8px; color: var(--label-3); font-size: 12.5px }
+.composer2 .row { gap: 6px }
+.statusbar { display: flex; align-items: center; gap: 14px; padding: 0 12px; font-size: 11.5px; color: var(--label-2) }
+.statusbar span { display: inline-flex; align-items: center; gap: 5px }
+.statusbar svg.i { width: 13px; height: 13px }
+.trace-pill { margin-left: auto; background: var(--content); box-shadow: var(--ring); border-radius: 11px; height: 22px; padding: 0 10px; color: var(--label) }
+.trace-pill .type { width: 14px; height: 14px } .trace-pill .type svg.i { width: 10px; height: 10px }
+.ghost { color: var(--label-3) }
+
+/* trace drawer */
+.drawer-demo { display: grid; grid-template-columns: minmax(0,1fr) 400px; gap: 8px; height: 560px }
+.dim { background: var(--content); border-radius: 12px; box-shadow: var(--ring); opacity: .45; padding: 16px; display: flex; flex-direction: column; gap: 10px }
+.dim i { display: block; height: 10px; border-radius: 4px; background: var(--control-2) }
+.drawer { display: flex; flex-direction: column; min-height: 0 }
+.drawer > header { display: flex; align-items: center; gap: 8px; padding: 12px 14px 6px; font-weight: 600 }
+.tev { display: grid; grid-template-columns: 38px 22px minmax(0,1fr); gap: 4px 8px; align-items: start; padding: 8px 14px; font-size: 12.5px }
+.tev time { font: 11px var(--mono); color: var(--label-3); padding-top: 3px }
+.tev .what { display: flex; flex-direction: column; gap: 3px; min-width: 0 }
+.tev .acts { display: flex; gap: 10px; font-size: 11.5px; color: var(--accent) }
+.tev.prompt { background: var(--window); border-radius: 10px; margin: 4px 8px; padding: 8px 6px }
+.auto { font-size: 10.5px; font-weight: 600; color: var(--label-2); background: var(--control); border-radius: 4px; padding: 0 5px; margin-left: 4px }
+.unsure { color: var(--warn) }
+
+/* immersive */
+.immersive { --window: #0d0d10; --content: #17171b; --label: rgba(255,255,255,.9); --label-2: rgba(255,255,255,.55); --label-3: rgba(255,255,255,.28); --control: rgba(255,255,255,.07); --control-2: rgba(255,255,255,.12); --separator: rgba(255,255,255,.07); --accent: #0a84ff; --accent-soft: rgba(10,132,255,.22); --ring: 0 0 0 1px rgba(255,255,255,.06); --lift: 0 0 0 1px rgba(255,255,255,.08), 0 20px 60px rgba(0,0,0,.6); color-scheme: dark;
+  min-width: 1040px; height: 620px; border-radius: 18px; background: radial-gradient(1200px 500px at 50% 110%, rgba(10,132,255,.18), transparent 60%), #0d0d10; color: var(--label); position: relative; overflow: hidden; font-size: 13px; box-shadow: var(--lift) }
+.im-preview { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); width: 620px; height: 380px; border-radius: 14px; background: #fff; box-shadow: var(--lift); overflow: hidden; display: grid; grid-template-rows: 34px 1fr }
+.im-preview .bar0 { background: #f2f3f5; display: flex; align-items: center; gap: 6px; padding: 0 12px; color: #888; font: 11px var(--mono) }
+.im-preview .pg { display: grid; grid-template-columns: 1fr 200px; gap: 14px; padding: 18px; color: #222 }
+.im-preview .blk { background: #eef0f3; border-radius: 6px }
+.im-preview .new { box-shadow: 0 0 0 2px #32d74b; background: #f2fff5; border-radius: 6px; padding: 8px; font-size: 11px; color: #1b7f37 }
+.orbs { position: absolute; left: 24px; top: 24px; display: flex; flex-direction: column; gap: 10px }
+.orb { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--label-2) }
+.orb .ring { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--tone) var(--p), rgba(255,255,255,.08) 0); }
+.orb .ring span { width: 24px; height: 24px; border-radius: 50%; background: #0d0d10; display: grid; place-items: center; color: var(--tone) }
+.orb .ring svg.i { width: 12px; height: 12px }
+.crumbs { position: absolute; right: 22px; top: 24px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end }
+.crumbs span { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--label-2); background: rgba(255,255,255,.05); border-radius: 10px; padding: 3px 9px }
+.crumbs span:nth-child(2) { opacity: .7 } .crumbs span:nth-child(3) { opacity: .45 } .crumbs span:nth-child(4) { opacity: .25 }
+.im-prompt { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); width: 640px; border-radius: 16px; background: rgba(30,30,36,.92); box-shadow: var(--lift); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px }
+.im-prompt .said { font-size: 15px; color: var(--label) }
+.im-prompt .said em { color: var(--label-3); font-style: normal }
+.mic { width: 30px; height: 30px; border-radius: 50%; background: var(--err); display: grid; place-items: center; color: #fff; margin-left: auto }
+.wave { display: flex; gap: 2px; align-items: center; height: 16px } .wave i { width: 3px; border-radius: 2px; background: var(--label-2) }
+.esc { position: absolute; left: 24px; bottom: 22px; font-size: 11px; color: var(--label-3) }
+
+/* scribe pipeline */
+.scribe { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px }
+.scribe > div { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 14px; display: flex; flex-direction: column; gap: 6px; position: relative }
+.scribe > div + div::before { content: "→"; position: absolute; left: -10px; top: 18px; color: var(--label-3); font-size: 13px }
+.scribe p { font-size: 12.5px; color: var(--label-2); line-height: 1.45 }
+@media (max-width: 860px) { .scribe { grid-template-columns: 1fr 1fr } .scribe > div + div::before { display: none } }
+pre.ts { background: var(--content); box-shadow: var(--ring); border-radius: 14px; padding: 16px 18px; font: 12.5px/1.65 var(--mono); overflow-x: auto; margin: 0 }
+pre.ts .cm { color: var(--label-3) }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-mic" viewBox="0 0 16 16"><rect x="5.8" y="1.8" width="4.4" height="8" rx="2.2"/><path d="M3.5 7.8a4.5 4.5 0 0 0 9 0M8 12.3v2"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 16 16"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5" r="1.5"/><path d="M4.5 5v6M11.5 6.5c0 3-4 2.5-7 4.5"/></symbol>
+  <symbol id="i-dive" viewBox="0 0 16 16"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></symbol>
+  <symbol id="i-trace" viewBox="0 0 16 16"><path d="M2 12.5c2.5 0 2.5-9 5-9s2 6 4.5 6 1.5-3 2.5-3"/><circle cx="2" cy="12.5" r=".9"/><circle cx="13.9" cy="6.5" r=".9"/></symbol>
+  <symbol id="i-at" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M10.5 8v1.2a1.8 1.8 0 0 0 3.5 0V8a6 6 0 1 0-2.4 4.8"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5 3.5 2.5 6 5 8.5"/><path d="M2.5 6h7a3.5 3.5 0 0 1 0 7H6"/></symbol>
+  <symbol id="i-layout" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1.6"/><path d="M6 2.5v11M6 8h8"/></symbol>
+</svg>
+
+<main class="wrap">
+
+  <header class="prose">
+    <span class="eyebrow">Návrh UI · Reactor · nový režim</span>
+    <h1>Agentní IDE: kód vepředu, Jira v zákulisí</h1>
+    <p class="lead">Vývojář chce psát prompty a kód, ne vyplňovat stories. Agentní IDE je třetí tvář Reactoru vedle Studia (Enterprise) a Vibe codingu: editor a composer jako v Cursoru, mřížka souběžně pracujících agentů jako v BridgeSpace. Za tím tiše pracuje <b>Zapisovatel</b>: z každého zadání a každého běhu dopisuje epic, story, tasky, bugy a wiki do stejného modelu, který používá Studio. Nic z toho nemusí být vidět. Kdo chce, proklikne se do Stopy a odtud do boardu nebo wiki.</p>
+  </header>
+
+  <section>
+    <div class="verdict">
+      <div><b>Jeden projekt, tři tváře</b><p>IDE není nový produkt. Je to předvolba workflow s novým krokem <code>ide</code>. Stories, tasky, běhy, náhled, testy i wiki jsou tytéž objekty, které vidí Studio. Projekt lze kdykoli přepnout do Enterprise a pokračovat na boardu.</p></div>
+      <div><b>Backlog jako vedlejší produkt</b><p>Zadání se nepíše dvakrát. Prompt je zadání: Zapisovatel ho přiřadí k existující story nebo založí novou, z běhů udělá tasky, z anotací a testů bugy a po přijetí změny navrhne wiki.</p></div>
+      <div><b>Ponor pro soustředění</b><p>Imerzní režim schová všechno kromě běžící aplikace a promptu (i hlasem). Agenti jsou jen prstence s průběhem, backlog jen mizející drobky v rohu. Esc vrací do IDE.</p></div>
+    </div>
+  </section>
+
+  <!-- ===================== IDE ===================== -->
+  <section>
+    <div class="prose">
+      <h2>1 · IDE</h2>
+      <p class="muted">Tři sloupce. Vlevo průzkumník se čtyřmi záložkami (Soubory, Repozitáře, Práce, Wiki). Uprostřed editor nahoře a mřížka agentů dole, jeden panel na repozitář, protože v Reactoru už každý repozitář má svého agenta. Vpravo composer. Dole stavová lišta a v ní Stopa: jediné místo, kde je backlog vidět, pokud o to nestojíte.</p>
+    </div>
+    <div class="scroller">
+      <div class="app ide">
+        <div class="top">
+          <div class="name"><b>Eshop Pekárna</b><small>Session 3 · RZ</small></div>
+          <div class="seg"><span>Studio</span><span class="on"><svg class="i"><use href="#i-code"/></svg>IDE</span><span>Vibe</span></div>
+          <span class="chip" style="margin-left:8px"><svg class="i" style="width:12px;height:12px"><use href="#i-branch"/></svg>feature/slevove-kody</span>
+          <div style="margin-left:auto" class="row">
+            <span class="small">3 agenti · 2 běží</span>
+            <span class="iconbtn" title="Rozložení mřížky"><svg class="i"><use href="#i-layout"/></svg></span>
+            <span class="iconbtn" title="Konzultant ⌘J"><svg class="i"><use href="#i-chat"/></svg></span>
+            <span class="btn"><svg class="i"><use href="#i-dive"/></svg>Ponor <kbd>⌘⇧↩</kbd></span>
+          </div>
+        </div>
+
+        <div class="ide-body">
+          <!-- explorer -->
+          <div class="card" style="display:flex;flex-direction:column;min-height:0">
+            <div class="xtabs">
+              <span class="on" title="Soubory"><svg class="i"><use href="#i-file"/></svg></span>
+              <span title="Repozitáře"><svg class="i"><use href="#i-repo"/></svg></span>
+              <span title="Práce"><svg class="i"><use href="#i-board"/></svg></span>
+              <span title="Wiki"><svg class="i"><use href="#i-wiki"/></svg></span>
+            </div>
+            <div class="ftree">
+              <div><b style="font-size:11px;color:var(--label-2)">WEB · main</b></div>
+              <div class="d1"><svg class="i"><use href="#i-file"/></svg>src</div>
+              <div class="d2"><svg class="i"><use href="#i-file"/></svg>cart/</div>
+              <div class="d2 cur"><svg class="i"><use href="#i-file"/></svg>Cart.tsx<span class="m">M</span></div>
+              <div class="d2"><svg class="i"><use href="#i-file"/></svg>CouponField.tsx<span class="m a">A</span></div>
+              <div class="d2"><svg class="i"><use href="#i-file"/></svg>api.ts<span class="m">M</span></div>
+              <div class="d1"><svg class="i"><use href="#i-file"/></svg>contract/openapi.yaml</div>
+              <div><b style="font-size:11px;color:var(--label-2);margin-top:8px">API · repos/api</b></div>
+              <div class="d1"><svg class="i"><use href="#i-file"/></svg>Coupons/</div>
+              <div class="d2"><svg class="i"><use href="#i-file"/></svg>CouponEndpoints.cs<span class="m a">A</span></div>
+              <div class="d2"><svg class="i"><use href="#i-file"/></svg>Coupon.cs<span class="m a">A</span></div>
+              <div class="d1"><svg class="i"><use href="#i-file"/></svg>Program.cs<span class="m">M</span></div>
+              <div><b style="font-size:11px;color:var(--label-2);margin-top:8px">E2E · repos/e2e</b></div>
+              <div class="d1"><svg class="i"><use href="#i-file"/></svg>cart.spec.ts<span class="m">M</span></div>
+            </div>
+          </div>
+
+          <!-- center -->
+          <div class="ide-center">
+            <div class="card" style="display:flex;flex-direction:column;min-height:0">
+              <div class="etabs">
+                <span class="on"><svg class="i" style="width:13px;height:13px;color:var(--c-fe)"><use href="#i-fe"/></svg>Cart.tsx</span>
+                <span>CouponField.tsx</span><span>CouponEndpoints.cs</span>
+                <span style="margin-left:auto" class="small">Diff agenta: <b style="color:var(--ok)">+18</b> <b style="color:var(--err)">−3</b> · <span style="color:var(--accent)">Přijmout vše</span></span>
+              </div>
+              <div class="code" style="flex:1">
+                <div><i>12</i><span><span class="kw">export function</span> <span class="fn">Cart</span>() {</span></div>
+                <div><i>13</i><span>  <span class="kw">const</span> { items, total } = <span class="fn">useCart</span>()</span></div>
+                <div class="add"><i>14</i><span>  <span class="kw">const</span> [coupon, setCoupon] = <span class="fn">useState</span>&lt;Coupon | <span class="kw">null</span>&gt;(<span class="kw">null</span>)</span></div>
+                <div class="add"><i>15</i><span>  <span class="kw">const</span> discounted = coupon ? <span class="fn">applyCoupon</span>(total, coupon) : total</span></div>
+                <div><i>16</i><span>  <span class="kw">return</span> (</span></div>
+                <div><i>17</i><span>    &lt;<span class="fn">Panel</span> title=<span class="st">"Košík"</span>&gt;</span></div>
+                <div class="del"><i>18</i><span>      &lt;<span class="fn">Total</span> value={total} /&gt;</span></div>
+                <div class="add"><i>18</i><span>      &lt;<span class="fn">CouponField</span> onApply={setCoupon} /&gt;</span></div>
+                <div class="add"><i>19</i><span>      &lt;<span class="fn">Total</span> value={discounted} before={coupon ? total : <span class="kw">undefined</span>} /&gt;</span></div>
+                <div><i>20</i><span>    &lt;/<span class="fn">Panel</span>&gt;</span></div>
+                <div><i>21</i><span>  )</span></div>
+                <div><i>22</i><span>}</span></div>
+                <div class="inline-ask"><svg class="i" style="color:var(--accent)"><use href="#i-spark"/></svg><span>Zobraz u přeškrtnuté ceny i ušetřenou částku</span><kbd style="margin-left:auto">⌘K</kbd></div>
+              </div>
+            </div>
+
+            <div class="card" style="min-height:0">
+              <div class="grid-head"><svg class="i"><use href="#i-grid"/></svg>Agenti <span class="small" style="font-weight:400">· jeden na repozitář, souběžně · klik = fokus, dvojklik = celá obrazovka</span></div>
+              <div class="agrid">
+                <div class="apane focus" style="--tone:var(--c-fe)">
+                  <header><span class="mini"><svg class="i"><use href="#i-fe"/></svg></span><b>FE vývojář</b><span class="small">web · Claude</span><svg class="i pulse" style="color:var(--run)"><use href="#s-run"/></svg></header>
+                  <div class="meter"><i style="width:46%"></i></div>
+                  <div class="term"><span class="d">▸ RZ-42 Pole pro slevový kód</span>
+Read  src/cart/Cart.tsx
+Edit  src/cart/Cart.tsx   <span class="g">+5 −1</span>
+Write src/cart/CouponField.tsx
+<span class="d">$ npm run typecheck</span>
+<span class="g">✓ 0 chyb</span>
+<span class="d">kontext 41k · 2,1 M tok</span></div>
+                </div>
+                <div class="apane" style="--tone:var(--c-be)">
+                  <header><span class="mini"><svg class="i"><use href="#i-be"/></svg></span><b>BE vývojář</b><span class="small">api · build-01</span><svg class="i pulse" style="color:var(--run)"><use href="#s-run"/></svg></header>
+                  <div class="meter"><i style="width:72%"></i></div>
+                  <div class="term"><span class="d">▸ RZ-43 Endpoint POST /coupons/validate</span>
+Write Coupons/Coupon.cs
+Write Coupons/CouponEndpoints.cs
+Edit  Program.cs           <span class="g">+2</span>
+<span class="d">$ dotnet build</span>
+<span class="g">Build succeeded.</span>
+<span class="d">kontext 63k · worker build-01</span></div>
+                </div>
+                <div class="apane" style="--tone:var(--c-test)">
+                  <header><span class="mini"><svg class="i"><use href="#i-test"/></svg></span><b>Tester</b><span class="small">e2e · čeká</span><svg class="i" style="color:var(--label-3)"><use href="#s-block"/></svg></header>
+                  <div class="meter"><i style="width:0"></i></div>
+                  <div class="term"><span class="d">▸ RZ-45 [RZ-41] Uplatnění kódu</span>
+<span class="d">napsáno: cart.spec.ts (3 testy)</span>
+<span class="d">spustí se po přijetí FE a BE</span>
+<span class="d">proti náhledu :80</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- composer -->
+          <div class="card comp">
+            <div class="pane" style="padding-bottom:6px"><h4><svg class="i" style="color:var(--accent)"><use href="#i-spark"/></svg>Composer <span class="muted">· Agent · plán → běhy</span></h4></div>
+            <div class="thread">
+              <div class="bubble me">Přidej do košíku slevové kódy. Procentní i pevná částka, platnost od–do, kód jde použít jen jednou na objednávku.</div>
+              <div class="bubble ai">Rozdělím to na tři běhy podle repozitářů a doplním kontrakt <code>POST /coupons/validate</code>.
+                <div class="proposal" style="margin-top:8px;background:var(--content)">
+                  <div class="row"><span class="mini" style="--tone:var(--c-split)"><svg class="i"><use href="#i-api"/></svg></span><b class="grow">Kontrakt</b><span class="small">openapi.yaml +24</span></div>
+                  <div class="row"><span class="mini" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span><span class="grow ell">web · pole, výpočet ceny</span><svg class="i pulse" style="color:var(--run)"><use href="#s-run"/></svg></div>
+                  <div class="row"><span class="mini" style="--tone:var(--c-be)"><svg class="i"><use href="#i-be"/></svg></span><span class="grow ell">api · entita, validace</span><svg class="i pulse" style="color:var(--run)"><use href="#s-run"/></svg></div>
+                  <div class="row"><span class="mini" style="--tone:var(--c-test)"><svg class="i"><use href="#i-test"/></svg></span><span class="grow ell">e2e · 3 scénáře</span><svg class="i" style="color:var(--label-3)"><use href="#s-block"/></svg></div>
+                </div>
+              </div>
+              <div class="bubble me">Slevu ukaž i v rekapitulaci objednávky.</div>
+              <div class="bubble ai">Přidávám do běhu FE vývojáře jako navazující krok.</div>
+            </div>
+            <div class="ctx">
+              <span class="pill"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span>RZ-41 Slevové kódy</span>
+              <span class="pill"><svg class="i" style="width:12px;height:12px"><use href="#i-file"/></svg>Cart.tsx</span>
+              <span class="pill"><svg class="i" style="width:12px;height:12px"><use href="#i-wiki"/></svg>Košík</span>
+            </div>
+            <div class="composer2">
+              <span>Co dál? <span class="ghost">@ soubor, story, wiki, obrazovka z Figmy</span></span>
+              <div class="row">
+                <span class="chip">Agent ▾</span><span class="chip">Opus 5.5 ▾</span><span class="chip">Lokálně ▾</span>
+                <span class="iconbtn" style="margin-left:auto" title="Diktovat"><svg class="i"><use href="#i-mic"/></svg></span>
+                <span class="send"><svg class="i"><use href="#i-play"/></svg></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="statusbar">
+          <span><svg class="i"><use href="#i-branch"/></svg>feature/slevove-kody · 3 repozitáře</span>
+          <span><svg class="i" style="color:var(--c-preview)"><use href="#i-preview"/></svg>Náhled běží · přestaví se po přijetí</span>
+          <span><svg class="i" style="color:var(--c-test)"><use href="#i-test"/></svg>Testy 14/15</span>
+          <span class="trace-pill"><svg class="i"><use href="#i-trace"/></svg>Stopa ·
+            <span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span>RZ-41 ·
+            <span class="type ty-task"><svg class="i"><use href="#t-task"/></svg></span>3 ·
+            <span class="type ty-bug"><svg class="i"><use href="#t-bug"/></svg></span>1 ·
+            <svg class="i" style="color:var(--c-wiki)"><use href="#i-wiki"/></svg>2 <kbd>⌘⇧T</kbd></span>
+        </div>
+      </div>
+    </div>
+    <div class="rules">
+      <div><svg class="i"><use href="#i-spark"/></svg><span><b>⌘K</b> úprava přímo v editoru, <b>⌘L</b> composer s výběrem jako kontextem, <b>⌘I</b> pošle výběr agentovi daného repozitáře.</span></div>
+      <div><svg class="i"><use href="#i-grid"/></svg><span><b>Mřížka</b> 1, 2, 3 nebo 2×2 panely; běh na vzdáleném workeru má jméno workeru v hlavičce. Volný panel může být terminál do kontejneru náhledu, nikdy do hostitele.</span></div>
+      <div><svg class="i"><use href="#i-check"/></svg><span><b>Revize zůstává</b>: diff agenta se v editoru ukazuje inline a přijímá se po souborech nebo celý. Je to stávající Přijmout / Vrátit z Implementace.</span></div>
+    </div>
+  </section>
+
+  <!-- ===================== STOPA ===================== -->
+  <section>
+    <div class="prose">
+      <h2>2 · Stopa: backlog, který se píše sám</h2>
+      <p class="muted">Klik na Stopu ve stavové liště vysune panel přes composer. Časová osa ukazuje, co Zapisovatel z kterého promptu udělal, a každá položka vede do Studia (story na boardu, task v Implementaci, stránka ve Wiki). Záložky Backlog a Wiki ukazují totéž jako strom a stránky. Nejistá přiřazení se neodhadují, čekají v <b>Nezařazeno</b>.</p>
+    </div>
+    <div class="scroller">
+      <div class="app" style="grid-template-rows:minmax(0,1fr)">
+        <div class="drawer-demo">
+          <div class="dim"><i style="width:40%"></i><i style="width:70%"></i><i style="width:55%"></i><i style="height:180px"></i><i style="width:60%"></i><i style="height:120px"></i></div>
+          <div class="card drawer">
+            <header><svg class="i"><use href="#i-trace"/></svg>Stopa <span class="seg" style="margin-left:auto;font-weight:400;font-size:12px"><span class="on">Časová osa</span><span>Backlog</span><span>Wiki</span></span></header>
+            <div style="overflow:hidden">
+              <div class="tev prompt"><time>14:02</time><svg class="i" style="color:var(--accent)"><use href="#i-chat"/></svg><div class="what"><span>„Přidej do košíku slevové kódy…“</span><span class="small">Nové téma → nová story v epicu Košík</span></div></div>
+              <div class="tev"><time></time><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><div class="what"><span><span class="key">RZ-41</span> Slevové kódy v košíku<span class="auto">AUTO</span></span><span class="small">4 akceptační kritéria odvozena z promptu</span><span class="acts"><span>Otevřít na boardu</span><span><svg class="i" style="width:12px;height:12px;vertical-align:-2px"><use href="#i-undo"/></svg> Vrátit</span></span></div></div>
+              <div class="tev"><time>14:03</time><span class="type ty-task"><svg class="i"><use href="#t-task"/></svg></span><div class="what"><span><span class="key">RZ-42</span> web · Pole pro slevový kód<span class="auto">AUTO</span></span><span class="small">z běhu FE vývojáře · 3 soubory · čeká na revizi</span></div></div>
+              <div class="tev"><time></time><span class="type ty-task"><svg class="i"><use href="#t-task"/></svg></span><div class="what"><span><span class="key">RZ-43</span> api · Validace kódu<span class="auto">AUTO</span></span><span class="small">z běhu BE vývojáře · build-01</span></div></div>
+              <div class="tev prompt"><time>14:09</time><svg class="i" style="color:var(--accent)"><use href="#i-chat"/></svg><div class="what"><span>„Slevu ukaž i v rekapitulaci objednávky.“</span><span class="small">Stejné téma → kritérium č. 5 do RZ-41</span></div></div>
+              <div class="tev"><time>14:15</time><span class="type ty-bug"><svg class="i"><use href="#t-bug"/></svg></span><div class="what"><span><span class="key">RZ-46</span> Prázdný kód projde validací</span><span class="small">z padajícího testu [RZ-41] · repozitář api</span></div></div>
+              <div class="tev"><time>14:21</time><svg class="i" style="color:var(--c-wiki)"><use href="#i-wiki"/></svg><div class="what"><span>Wiki · Košík › Slevové kódy<span class="auto">VERZE 7</span></span><span class="small">Dokumentarista po přijetí RZ-42 a RZ-43 · jak kód zadat, pravidla platnosti</span><span class="acts"><span>Zobrazit změny</span><span>Vrátit na verzi 6</span></span></div></div>
+              <div class="tev prompt"><time>14:30</time><svg class="i unsure"><use href="#s-wait"/></svg><div class="what"><span>„Zrychli načítání produktů.“</span><span class="small unsure">Nezařazeno · možná RZ-12 Katalog, nebo nová technická story</span><span class="acts"><span>RZ-12</span><span>Nová story</span><span>Neevidovat</span></span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PONOR ===================== -->
+  <section>
+    <div class="prose">
+      <h2>3 · Ponor (imerzní režim)</h2>
+      <p class="muted">Celá obrazovka, tma, uprostřed běžící aplikace z náhledu. Mluvíte nebo píšete jen do jednoho pole dole. Klik do aplikace funguje jako anotace z Náhledu: označí prvek a přidá ho k promptu. Vlevo prstence agentů s průběhem, vpravo drobky Zapisovatele, které po pár vteřinách vyblednou. Náhled se po každém přijatém běhu sám přestaví. Kód ani diffy tu nejsou: přijímá se tím, co je vidět, a kód čeká na revizi v IDE, pokud není zapnuté automatické přijetí.</p>
+    </div>
+    <div class="scroller">
+      <div class="immersive">
+        <div class="orbs">
+          <div class="orb" style="--tone:var(--c-fe);--p:62%"><span class="ring"><span><svg class="i"><use href="#i-fe"/></svg></span></span>web · rekapitulace</div>
+          <div class="orb" style="--tone:var(--c-be);--p:100%"><span class="ring"><span><svg class="i"><use href="#i-check"/></svg></span></span>api · hotovo</div>
+          <div class="orb" style="--tone:var(--c-test);--p:20%"><span class="ring"><span><svg class="i"><use href="#i-test"/></svg></span></span>e2e · 1/3</div>
+        </div>
+        <div class="crumbs">
+          <span><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span>RZ-41 + kritérium</span>
+          <span><span class="type ty-task"><svg class="i"><use href="#t-task"/></svg></span>RZ-47 web · rekapitulace</span>
+          <span><svg class="i" style="width:12px;height:12px;color:var(--c-wiki)"><use href="#i-wiki"/></svg>wiki · Košík ↻</span>
+          <span><span class="type ty-bug"><svg class="i"><use href="#t-bug"/></svg></span>RZ-46 uzavřen</span>
+        </div>
+        <div class="im-preview">
+          <div class="bar0">● ● ●&nbsp;&nbsp; náhled · /checkout/summary</div>
+          <div class="pg">
+            <div style="display:flex;flex-direction:column;gap:10px"><b style="font-size:16px">Rekapitulace</b><div class="blk" style="height:46px"></div><div class="blk" style="height:46px"></div><div class="blk" style="height:46px"></div></div>
+            <div style="display:flex;flex-direction:column;gap:10px"><div class="blk" style="height:90px"></div><div class="new">Sleva JARO10 · −10 %<br><b>−84 Kč</b></div><div class="blk" style="height:34px;background:#0a84ff"></div></div>
+          </div>
+        </div>
+        <div class="im-prompt">
+          <div class="said">Ať je sleva zelená a pod ní odkaz „Odebrat kód“ <em>…</em></div>
+          <div class="row">
+            <span class="pill" style="background:rgba(255,255,255,.07)"><svg class="i" style="width:12px;height:12px;color:var(--c-preview)"><use href="#i-preview"/></svg>prvek: Sleva JARO10</span>
+            <div class="wave"><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:9px"></i><i style="height:13px"></i><i style="height:5px"></i><i style="height:11px"></i></div>
+            <span class="mic"><svg class="i"><use href="#i-mic"/></svg></span>
+          </div>
+        </div>
+        <div class="esc"><kbd>Esc</kbd> zpět do IDE · <kbd>⌘⇧T</kbd> Stopa · podržet <kbd>Fn</kbd> diktování</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ZAPISOVATEL ===================== -->
+  <section>
+    <div class="prose">
+      <h2>Jak pracuje Zapisovatel</h2>
+      <p class="muted">Je to nová role vedle Analytika, Architekta a Dokumentaristy. Neběží u každého znaku: poslouchá události, které server už dnes vysílá na SSE sběrnici, a zpracovává je po dávkách. Používá menší model (nastavitelný v Sazbách modelů), takže backlog stojí zlomek ceny implementace.</p>
+    </div>
+    <div class="scribe">
+      <div><b>1 · Prompt</b><p>Z composeru nebo Ponoru. Zapisovatel dostane prompt, seznam otevřených stories (klíč, název, kritéria) a aktuální „téma“ session.</p></div>
+      <div><b>2 · Přiřazení</b><p>Stejné téma → doplní kritérium. Nové téma → nová story pod nejbližší epic. Nejistota → Nezařazeno. Technické prompty bez dopadu na uživatele → task bez story.</p></div>
+      <div><b>3 · Běhy</b><p>Každý běh agenta v repozitáři je task (<code>source: 'ide'</code>) se soubory a commitem. Přijetí ho uzavře, Vrátit ho vrátí do práce. Totéž, co dnes dělá <code>tasks.ts</code>.</p></div>
+      <div><b>4 · Chyby</b><p>Anotace z Náhledu a Ponoru a padající Playwright testy už dnes zakládají bugy. V IDE jen dostanou story, ke které patří.</p></div>
+      <div><b>5 · Wiki</b><p>Po přijetí, ne po každém běhu: Dokumentarista navrhne změnu stránky epicu. Wiki už drží verze, takže automatické přijetí jde vrátit.</p></div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Událost</th><th>Co vznikne</th><th>Výchozí politika</th></tr></thead>
+        <tbody>
+          <tr><td>Prompt v composeru / Ponoru</td><td>Story nebo kritérium, případně epic</td><td>Automaticky, s možností Vrátit ve Stopě</td></tr>
+          <tr><td>Plán composeru (více repozitářů)</td><td>Tasky po repozitářích, změna kontraktu</td><td>Automaticky, kontrakt jako dnes ke schválení</td></tr>
+          <tr><td>Konec běhu agenta</td><td>Task ve stavu ke schválení, soubory, tokeny</td><td>Automaticky (je to záznam, ne plán)</td></tr>
+          <tr><td>Přijetí / vrácení kódu</td><td>Stav tasku, posun story na boardu</td><td>Automaticky</td></tr>
+          <tr><td>Anotace, padající test</td><td>Bug pod story a repozitářem</td><td>Automaticky (beze změny proti dnešku)</td></tr>
+          <tr><td>Story má přijaté tasky a zelené testy</td><td>Změna wiki stránky</td><td>Automaticky s verzí, nebo návrh ke schválení (přepínač)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== NAPOJENÍ ===================== -->
+  <section>
+    <div class="prose">
+      <h2>Napojení na to, co už je</h2>
+      <p class="muted">Většina IDE je skládačka hotových dílů. Nové jsou jen krok <code>ide</code>, Zapisovatel a Stopa.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Existující díl</th><th>Kde je</th><th>Použití v IDE</th></tr></thead>
+        <tbody>
+          <tr><td>Workflow předvolby</td><td><code>packages/shared</code> <code>WORKFLOW_PRESETS</code>, <code>STAGES</code></td><td>Nový krok <code>ide</code> a předvolba <b>Agentní IDE</b>: IDE → Náhled → Testy → Wiki. Přepínač Studio / IDE / Vibe v hlavičce mění předvolbu session, data zůstávají.</td></tr>
+          <tr><td>Monaco + soubory + Git</td><td><code>monaco.ts</code>, <code>CodeStage</code>, <code>GitView</code>, <code>workspace.ts</code></td><td>Editor a průzkumník; <code>?repo=</code> už rozlišuje repozitáře, takže strom ukáže všechny najednou.</td></tr>
+          <tr><td>Agent na repozitář, běhy</td><td><code>tasks.ts</code>, <code>packages/runner</code>, <code>agents.ts</code></td><td>Panel mřížky = běh tasku v repozitáři (stream-json / codex exec). Souběžně mezi repozitáři, postupně uvnitř, jako dnes.</td></tr>
+          <tr><td>Workery a pipeline</td><td><code>hub.ts</code>, <code>pipeline.ts</code></td><td>Plán composeru je malá pipeline; panely mohou běžet na vzdálených workerech, hlavička panelu ukáže worker.</td></tr>
+          <tr><td>Telemetrie běhů</td><td><code>data/agent-runs.json</code>, <code>AgentRuns</code></td><td>Proužek kontextu a tokeny v hlavičce panelu. Běh IDE má v přehledu krok „IDE“.</td></tr>
+          <tr><td>Konzultant a návrhy</td><td><code>chat.ts</code>, <code>AgentPanel</code>, <code>OpSchema</code></td><td>Composer v režimu <i>Ptát se</i> = konzultant (⌘J). Režim <i>Agent</i> rovnou spouští běhy. Zapisovatel vrací tytéž <code>ops</code>.</td></tr>
+          <tr><td>Náhled a anotace</td><td><code>preview.ts</code>, <code>inspector.ts</code></td><td>Plátno Ponoru; klik na prvek = kontext promptu, anotace = bug.</td></tr>
+          <tr><td>Playwright</td><td><code>tests.ts</code></td><td>Tester panel; mapování <code>[RZ-n]</code> funguje, protože stories mají klíče od Zapisovatele.</td></tr>
+          <tr><td>Wiki a Dokumentarista</td><td><code>WikiStage</code>, <code>Project.wiki</code></td><td>Záložka Wiki v průzkumníku (jen čtení + odkaz do Studia), změny po přijetí.</td></tr>
+          <tr><td>Sessions a snapshoty</td><td><code>docs/session-snapshots.md</code></td><td>Session IDE je běžná session; snapshot zachytí kód i vzniklý backlog.</td></tr>
+          <tr><td>Role a Plánování</td><td><code>auth.ts</code>, <code>planning.ts</code></td><td>Čtenář vidí IDE jen pro čtení. Plánování (odhady, poznámky) agenti dál nedostávají, ani Zapisovatel.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre class="ts"><span class="cm">// packages/shared – nové minimum</span>
+STAGES            += 'ide'                                   <span class="cm">// STEP_TITLES.ide = 'IDE', ikona a barva v Glyphs.tsx</span>
+WORKFLOW_PRESETS.ide = { label: 'Agentní IDE', kinds: ['ide', 'preview', 'tests', 'wiki'] }
+Issue.source      += 'ide'                                   <span class="cm">// dnes 'breakdown' | 'test' | 'annotation' | 'manual'</span>
+Story.origin?:      'ide'                                    <span class="cm">// badge AUTO na boardu</span>
+Project.trace?:     TraceEvent[]                             <span class="cm">// { at, kind, ref, promptId?, runId?, auto, revert? } – Stopa</span>
+Project.ide?:       { record: 'auto' | 'review', wiki: 'auto' | 'review', topic?: string }
+
+<span class="cm">// apps/server – nové soubory</span>
+scribe.ts   <span class="cm">// odběr events.ts → dávka → ScribeReplySchema (podmnožina OpSchema) → applyOps přes mutateProject</span>
+ide.ts      <span class="cm">// routa composeru v režimu Agent: plán → tasky po repozitářích → běhy (tasks.ts)</span></pre>
+  </section>
+
+  <!-- ===================== ROZHODNUTÍ ===================== -->
+  <section>
+    <div class="prose">
+      <h2>K rozhodnutí</h2>
+    </div>
+    <ol class="qs">
+      <li><b>Automatické zápisy vs. pravidlo „agent nikdy nemění projekt přímo“.</b> Doporučuji výjimku jen pro Zapisovatele a jen pro záznamy odvozené z vašeho promptu nebo z proběhlé práce: označené AUTO, vratné ze Stopy, s přepínačem na režim „ke schválení“. Kód zůstává vždy na revizi člověka.</li>
+      <li><b>Wiki automaticky, nebo jako návrh?</b> Doporučuji automaticky s verzí v IDE a jako návrh ve Studiu (Enterprise), kde ji dnes někdo čte a schvaluje.</li>
+      <li><b>Hlas v Ponoru.</b> Nejjednodušší je Web Speech API v prohlížeči (kvalita a jazyková podpora závisí na prohlížeči a u některých posílá zvuk poskytovateli prohlížeče, pro TISAX projekty to může být problém). Alternativa je přepis na workeru. Navrhuji začít bez hlasu a přidat ho ve 3. kroku.</li>
+      <li><b>Terminál v mřížce.</b> Interaktivní shell jen do kontejneru <code>aforge-runtime</code>, ne do hostitele ani workeru. Nebo vůbec, a panely jsou jen streamy agentů.</li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="prose"><h2>Postup</h2></div>
+    <div class="steps">
+      <div><b>IDE bez Zapisovatele</b><p>Krok <code>ide</code>, předvolba, rozložení tří sloupců z existujících dílů: Monaco, běhy tasků jako mřížka, konzultant jako composer. Tasky zakládá composer přímo.</p></div>
+      <div><b>Zapisovatel a Stopa</b><p><code>scribe.ts</code>, <code>Project.trace</code>, stavová lišta a panel Stopy, AUTO badge na boardu, Nezařazeno, Vrátit. Testy na přiřazení k tématu.</p></div>
+      <div><b>Ponor</b><p>Celoobrazovkový náhled, prstence, drobky, anotace jako kontext promptu. Pak hlas.</p></div>
+      <div><b>Wiki v proudu</b><p>Dokumentarista spouštěný přijetím v IDE, politika auto/návrh, záložka Wiki v průzkumníku.</p></div>
+    </div>
+  </section>
+
+</main>

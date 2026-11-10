@@ -33,18 +33,18 @@ export const PlanSchema = z.object({
 })
 type Plan = z.infer<typeof PlanSchema>
 
-const ORCHESTRATOR_SYSTEM = `Jsi orchestrátor vývoje v platformě aForge. Dostaneš celý projekt (stories, wireframy, bloky,
+const ORCHESTRATOR_SYSTEM = `Jsi orchestrátor vývoje v platformě Reactor. Dostaneš celý projekt (stories, design z Figmy, bloky,
 soubory, anotace, testy) a cíl. Sestav co nejkratší plán úloh, které cíl splní. Fáze úloh:
 - stories: doplnit/upravit user stories a akceptační kritéria
-- wireframes: navrhnout chybějící obrazovky a prvky
-- blocks: převést stories a wireframy na model bloků a vazeb
+- wireframes: k designu z Figmy doplnit poznámky a vazby prvků na stories (design samotný se mění jen ve Figmě)
+- blocks: navrhnout architekturu a workflow jako diagramy Mermaid (FE, BE, DB, průběhy, stavy, data)
 - review: zkontrolovat konzistenci (stories × design × bloky × kód × testy) a navrhnout opravy
 - build: implementace agentem v repozitáři (jedna úloha build pokryje celý kód; víc buildů jen když na sebe navazují)
 - tests: spustit aplikaci v kontejneru a Playwright testy
 Vynech fáze, které už jsou hotové a aktuální. Úlohy, které na sobě nezávisí, nech bez závislosti – poběží
 paralelně na různých workerech. Instrukce piš konkrétně a samostatně (worker nevidí ostatní úlohy).`
 
-const STAGE_OF: Record<Phase, Stage> = { stories: 'stories', wireframes: 'design', blocks: 'blocks', review: 'stories', build: 'build', tests: 'tests' }
+const STAGE_OF: Record<Phase, Stage> = { stories: 'stories', wireframes: 'design', blocks: 'build', review: 'stories', build: 'build', tests: 'tests' }
 
 const runs = new Map<string, { run: PipelineRun; cancelled: boolean }>()
 
@@ -78,7 +78,7 @@ const runTask = async (projectId: string, task: PipelineTask, run: PipelineRun, 
   if (task.phase === 'build') {
     const hasCode = flatPaths(await fileTree(projectId)).includes('.aforge/start.sh')
     await waitFor(() => !isBuilding(projectId), cancelled)
-    const ok = await startBuild(projectId, hasCode ? 'incremental' : 'full').done
+    const ok = await startBuild(projectId, hasCode ? 'incremental' : 'full', `Pipeline · ${task.id} · ${task.title}`).done
     if (!ok) throw new Error('Build se nepovedl')
     return
   }
@@ -92,7 +92,7 @@ const runTask = async (projectId: string, task: PipelineTask, run: PipelineRun, 
     task.note = note
     return
   }
-  const [, reply] = await askConsultant(projectId, `[Pipeline · ${task.title}]\n${task.instruction}`, { stage: STAGE_OF[task.phase] })
+  const [, reply] = await askConsultant(projectId, `[Pipeline · ${task.title}]\n${task.instruction}`, { stage: STAGE_OF[task.phase] }, `Pipeline · ${task.id} · ${task.title}`)
   if (!reply.proposals.length) return
   if (run.autoApply) {
     // Only model changes are applied automatically; code edits always wait for a person.
@@ -118,7 +118,7 @@ export const startPipeline = async (projectId: string, goal: string, autoApply: 
     try {
       const project = await loadProject(projectId)
       const context = await buildContext(project, { stage: 'stories' }, [])
-      const plan: Plan = await structured(PlanSchema, ORCHESTRATOR_SYSTEM, `${context}\n\n<goal>\n${goal}\n</goal>`, { labels: ['orchestrator'] })
+      const plan: Plan = await structured(PlanSchema, ORCHESTRATOR_SYSTEM, `${context}\n\n<goal>\n${goal}\n</goal>`, { labels: ['orchestrator'], projectId, projectName: project.name, step: 'Plánování pipeline' })
       const ids = new Set(plan.tasks.map((t) => t.id))
       run.summary = plan.summary
       run.tasks = plan.tasks.map((t) => ({ ...t, dependsOn: t.dependsOn.filter((d) => ids.has(d) && d !== t.id), status: 'pending' }))
@@ -166,12 +166,13 @@ export const startPipeline = async (projectId: string, goal: string, autoApply: 
       for (const t of run.tasks) if (t.status === 'pending' || t.status === 'running' || t.status === 'awaiting') t.status = 'skipped'
     } finally {
       run.finishedAt = new Date().toISOString()
-      runs.delete(projectId)
-      await persist(projectId, run)
+      try { await persist(projectId, run) } finally { runs.delete(projectId) }
     }
   })()
   return run
 }
+
+export const isPipelineRunning = (projectId: string) => runs.has(projectId)
 
 export const cancelPipeline = (projectId: string) => {
   const state = runs.get(projectId)

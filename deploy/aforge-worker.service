@@ -1,18 +1,29 @@
-# systemd unit for a worker server. Install the repo to /opt/aforge (npm install), log in to
-# `claude` and/or `codex` as the service user, enroll once, then:
-#   sudo cp deploy/aforge-worker.service /etc/systemd/system/ && sudo systemctl enable --now aforge-worker
+# Production worker: rootless Docker, job images, egress proxy and scoped model API credentials
+# must be configured in /etc/aforge/worker.env. See deploy/production/INSTALL.md.
 [Unit]
-Description=aForge worker (Claude Code / Codex agent daemon)
+Description=Reactor isolated worker daemon
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=aforge
 WorkingDirectory=/opt/aforge
-ExecStart=/usr/bin/npx tsx apps/worker/src/cli.ts run
-Restart=always
+ExecStart=/usr/bin/node --import tsx apps/worker/src/cli.ts run
+Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
+Environment=AFORGE_AGENT_SANDBOX=docker
+Environment=AFORGE_WORKER_HOME=/var/lib/aforge-worker/config
+Environment=AFORGE_WORKER_JOBS_DIR=/var/lib/aforge-worker/jobs
+EnvironmentFile=/etc/aforge/worker.env
+StateDirectory=aforge-worker
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aforge-worker
+KillMode=control-group
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target

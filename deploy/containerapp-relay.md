@@ -8,5 +8,5 @@ az containerapp create -g <rg> -n aforge-relay --environment <env> \
 ```
 
 Relay drží místnosti v paměti, proto **právě jedna replika** (víc replik by potřebovalo sticky routing podle
-místnosti). Ingress Container Apps zajistí TLS, workery i aForge pak používají `wss://aforge-relay.<env>.azurecontainerapps.io`.
+místnosti). Ingress Container Apps zajistí TLS, workery i Reactor pak používají `wss://aforge-relay.<env>.azurecontainerapps.io`.
 Alternativa bez serveru: Cloudflare Worker + Durable Object podle `afinder/mobile/relay` (stejný protokol rámců).

@@ -1,0 +1,81 @@
+{
+  "realm": "aforge",
+  "displayName": "Reactor",
+  "enabled": true,
+  "sslRequired": "none",
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "cs",
+    "en"
+  ],
+  "defaultLocale": "cs",
+  "roles": {
+    "realm": [
+      {
+        "name": "aforge-admin",
+        "description": "Správa uživatelů, agentů a nastavení Reactor"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "aforge",
+      "name": "Reactor",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5310/*",
+        "http://localhost:4310/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5310/*##http://localhost:4310/*"
+      }
+    }
+  ],
+  "users": [
+    {
+      "id": "23eb17c4-28d7-4528-9a65-78620c296ef6",
+      "username": "admin",
+      "enabled": true,
+      "firstName": "Admin",
+      "lastName": "Reactor",
+      "email": "admin@aforge.local",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-aforge",
+        "aforge-admin"
+      ]
+    },
+    {
+      "id": "19664480-a719-433f-9b73-29f01e38d443",
+      "username": "developer",
+      "enabled": true,
+      "firstName": "Vývojář",
+      "lastName": "Reactor",
+      "email": "developer@aforge.local",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "developer",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-aforge"
+      ]
+    }
+  ]
+}

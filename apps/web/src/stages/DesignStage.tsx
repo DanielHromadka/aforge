@@ -1,383 +1,558 @@
-// Wireframe editor: screens of absolutely positioned elements, drag to move, corner handle to resize,
-// an inspector to name them and link them to stories. Figma frames come in through the REST import,
-// and a Figma file can be shown embedded next to the canvas.
-import { useEffect, useRef, useState } from 'react'
-import { ELEMENT_KINDS, type Project, type Screen, type WireElement } from '@aforge/shared'
-import { api, uid } from '../api'
+// Design: the design lives in Figma and comes in by sync. The canvas shows the rendered frame and lets
+// you pick its layers, the Layers panel shows the layer tree, the Inspector annotates the picked layer
+// (note, stories, work mark) and the Figma panel shows the file live. Nothing is drawn here.
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { elementDepths, type DesignElement, type Project, type Screen } from '@aforge/shared'
+import { api } from '../api'
 import { Icon } from '../icons'
+import { Spinner } from '../components/ActionButton'
 import { useStudio } from '../studio'
 import { Dialog } from '../components/Dialog'
 
-const KIND_LABEL: Record<WireElement['kind'], string> = {
-  container: 'Kontejner',
-  text: 'Text',
-  button: 'Tlačítko',
-  input: 'Vstup',
-  image: 'Obrázek',
-  nav: 'Navigace',
-  list: 'Seznam',
-  table: 'Tabulka',
-  card: 'Karta',
+// ---- shared bits ----------------------------------------------------------------------------
+
+/** The layer under the pointer, shared by the canvas and the Layers panel. */
+let hovered: string | undefined
+const hoverSubs = new Set<() => void>()
+const setHovered = (id?: string) => {
+  if (id === hovered) return
+  hovered = id
+  hoverSubs.forEach((f) => f())
 }
+const useHovered = () =>
+  useSyncExternalStore(
+    (cb) => {
+      hoverSubs.add(cb)
+      return () => hoverSubs.delete(cb)
+    },
+    () => hovered,
+  )
 
-const DEFAULT_SIZE: Record<WireElement['kind'], [number, number]> = {
-  container: [400, 240],
-  text: [240, 28],
-  button: [140, 40],
-  input: [280, 38],
-  image: [240, 160],
-  nav: [1280, 56],
-  list: [360, 220],
-  table: [640, 260],
-  card: [300, 180],
-}
-
-const SIZES = [
-  { label: 'Desktop 1280×800', w: 1280, h: 800 },
-  { label: 'Laptop 1440×900', w: 1440, h: 900 },
-  { label: 'Tablet 834×1112', w: 834, h: 1112 },
-  { label: 'Mobil 390×844', w: 390, h: 844 },
-]
-
-type Drag = { id: string; mode: 'move' | 'resize'; sx: number; sy: number; orig: WireElement }
-
-export const DesignStage = () => {
+const useScreen = () => {
   const s = useStudio()
   const screen = s.project.screens.find((x) => x.id === s.focus.screenId) ?? s.project.screens[0]
-  const [zoom, setZoom] = useState(() => Number(localStorage.getItem('aforge.zoom')) || 0.75)
-  const [figmaOpen, setFigmaOpen] = useState(false)
-  const [embedUrl, setEmbedUrl] = useState(() => localStorage.getItem(`aforge.figmaEmbed.${s.project.id}`) ?? '')
-  const [showEmbed, setShowEmbed] = useState(false)
-  const drag = useRef<Drag | null>(null)
-  const selectedId = s.focus.elementId
-  const selected = screen?.elements.find((e) => e.id === selectedId)
+  const selected = screen?.elements.find((e) => e.id === s.focus.elementId)
+  const select = (id?: string) => screen && s.setFocus({ screenId: screen.id, elementId: id })
+  return { s, screen, selected, select }
+}
 
-  useEffect(() => localStorage.setItem('aforge.zoom', String(zoom)), [zoom])
+/** Link to a node in the Figma editor. */
+const figmaLink = (fileUrl: string | undefined, figmaId?: string) => {
+  const key = fileUrl?.match(/figma\.com\/(?:file|design|proto)\/([A-Za-z0-9]+)/)?.[1]
+  if (!key) return undefined
+  return `https://www.figma.com/design/${key}/${figmaId ? `?node-id=${figmaId.replace(/:/g, '-')}` : ''}`
+}
 
-  const updateScreen = (fn: (sc: Screen) => Screen) =>
-    s.update((p: Project) => ({ ...p, screens: p.screens.map((sc) => (sc.id === screen?.id ? fn(sc) : sc)) }))
+const TYPE_GLYPH: Record<string, string> = {
+  TEXT: 'T',
+  FRAME: '#',
+  INSTANCE: '◇',
+  COMPONENT: '❖',
+  COMPONENT_SET: '❖',
+  GROUP: '▢',
+  RECTANGLE: '▭',
+  SECTION: '§',
+}
 
-  const updateEl = (id: string, patch: Partial<WireElement>) =>
-    updateScreen((sc) => ({ ...sc, elements: sc.elements.map((e) => (e.id === id ? { ...e, ...patch } : e)) }))
+const updateElement = (update: (fn: (p: Project) => Project) => void, screenId: string, id: string, patch: Partial<DesignElement>) =>
+  update((p) => ({
+    ...p,
+    screens: p.screens.map((sc) =>
+      sc.id === screenId
+        ? {
+            ...sc,
+            elements: sc.elements.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+          }
+        : sc,
+    ),
+  }))
 
-  const addEl = (kind: WireElement['kind']) => {
-    if (!screen) return
-    const [w, h] = DEFAULT_SIZE[kind]
-    const el: WireElement = {
-      id: uid('el'),
-      kind,
-      x: kind === 'nav' ? 0 : 40 + (screen.elements.length % 8) * 24,
-      y: kind === 'nav' ? 0 : 80 + (screen.elements.length % 8) * 24,
-      w: kind === 'nav' ? screen.width : w,
-      h,
-      label: KIND_LABEL[kind],
-      note: '',
-      storyIds: [],
+// ---- sync ------------------------------------------------------------------------------------
+
+const TOKEN_KEY = 'aforge.figmaToken'
+
+const useFigmaSync = () => {
+  const s = useStudio()
+  const [busy, setBusy] = useState(false)
+  const run = async (url?: string, token?: string) => {
+    setBusy(true)
+    try {
+      await s.flush()
+      if (token !== undefined) localStorage.setItem(TOKEN_KEY, token)
+      const r = await api<{
+        project: Project
+        added: number
+        removed: number
+        updated: number
+      }>(`/projects/${s.project.id}/figma`, {
+        body: { url, token: token ?? localStorage.getItem(TOKEN_KEY) ?? '' },
+      })
+      await s.reload()
+      const parts = [`${r.project.screens.length} obrazovek`, r.added && `nové ${r.added}`, r.removed && `odebrané ${r.removed}`].filter(Boolean)
+      s.toast(`Synchronizováno z Figmy: ${parts.join(', ')}.`)
+      if (!r.project.screens.some((x) => x.id === s.focus.screenId)) s.setFocus({ screenId: r.project.screens[0]?.id })
+      return true
+    } catch (e) {
+      s.toast((e as Error).message, true)
+      return false
+    } finally {
+      setBusy(false)
     }
-    updateScreen((sc) => ({ ...sc, elements: [...sc.elements, el] }))
-    s.setFocus({ screenId: screen.id, elementId: el.id })
   }
+  return { busy, run }
+}
 
-  const removeSelected = () => {
-    if (!selected || !screen) return
-    updateScreen((sc) => ({ ...sc, elements: sc.elements.filter((e) => e.id !== selected.id) }))
-    s.setFocus({ screenId: screen.id })
-  }
+// ---- canvas (the stage) ----------------------------------------------------------------------
 
-  useEffect(() => {
-    const move = (e: PointerEvent) => {
-      const d = drag.current
-      if (!d) return
-      const dx = (e.clientX - d.sx) / zoom
-      const dy = (e.clientY - d.sy) / zoom
-      const snap = (v: number) => (e.altKey ? Math.round(v) : Math.round(v / 8) * 8)
-      if (d.mode === 'move') updateEl(d.id, { x: snap(d.orig.x + dx), y: snap(d.orig.y + dy) })
-      else updateEl(d.id, { w: Math.max(16, snap(d.orig.w + dx)), h: Math.max(12, snap(d.orig.h + dy)) })
-    }
-    const up = () => (drag.current = null)
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-    return () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-    }
+type Zoom = number | 'fit'
+
+export const DesignStage = () => {
+  const { s, screen, selected, select } = useScreen()
+  const hover = useHovered()
+  const sync = useFigmaSync()
+  const [setup, setSetup] = useState(false)
+  const [zoomPref, setZoomPref] = useState<Zoom>(() => {
+    const v = localStorage.getItem('aforge.zoom')
+    return v === 'fit' || !v ? 'fit' : Number(v) || 'fit'
   })
+  const wrap = useRef<HTMLDivElement>(null)
+  const [wrapWidth, setWrapWidth] = useState(1000)
+  const depths = useMemo(() => (screen ? elementDepths(screen) : new Map<string, number>()), [screen])
 
+  useEffect(() => localStorage.setItem('aforge.zoom', String(zoomPref)), [zoomPref])
+  useEffect(() => {
+    const el = wrap.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setWrapWidth(el.clientWidth))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [screen?.id])
+
+  const zoom = zoomPref === 'fit' ? Math.min(2, Math.max(0.1, (wrapWidth - 80) / (screen?.width || 1))) : zoomPref
+
+  // Escape walks up to the parent layer, then clears the selection.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement
-      if (!selected || t.closest('input, textarea, select, [contenteditable]')) return
-      if (e.key === 'Backspace' || e.key === 'Delete') {
-        e.preventDefault()
-        removeSelected()
-      }
-      const step = e.shiftKey ? 8 : 1
-      const nudge: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }
-      if (nudge[e.key]) {
-        e.preventDefault()
-        updateEl(selected.id, { x: selected.x + nudge[e.key]![0], y: selected.y + nudge[e.key]![1] })
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
-        e.preventDefault()
-        const copy = { ...selected, id: uid('el'), x: selected.x + 16, y: selected.y + 16 }
-        updateScreen((sc) => ({ ...sc, elements: [...sc.elements, copy] }))
-        s.setFocus({ screenId: screen!.id, elementId: copy.id })
-      }
+      if (e.key !== 'Escape' || !selected || (e.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return
+      select(selected.parentId)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  if (!screen) {
-    return (
-      <div className="empty">
-        <div>
-          Projekt nemá žádnou obrazovku.
-          <p>Přidejte ji v postranním panelu (+ u Obrazovky).</p>
-        </div>
-      </div>
-    )
+  /** The deepest layer under the point; among equals the one painted last. */
+  const hitTest = (e: React.PointerEvent) => {
+    if (!screen) return undefined
+    const r = e.currentTarget.getBoundingClientRect()
+    const x = (e.clientX - r.left) / zoom
+    const y = (e.clientY - r.top) / zoom
+    let best: DesignElement | undefined
+    let bestDepth = -1
+    for (const el of screen.elements) {
+      if (x < el.x || y < el.y || x > el.x + el.w || y > el.y + el.h) continue
+      const d = depths.get(el.id) ?? 0
+      if (d >= bestDepth) {
+        best = el
+        bestDepth = d
+      }
+    }
+    return best
   }
+
+  const quickSync = () => (s.project.figma?.url ? void sync.run().then((ok) => !ok && setSetup(true)) : setSetup(true))
+
+  const box = (el: DesignElement) => ({
+    left: el.x * zoom,
+    top: el.y * zoom,
+    width: el.w * zoom,
+    height: el.h * zoom,
+  })
+  const hoverEl = hover && hover !== selected?.id ? screen?.elements.find((e) => e.id === hover) : undefined
+  const imageUrl = screen?.image && `/api/projects/${s.project.id}/figma/${screen.image}?v=${encodeURIComponent(s.project.figma?.syncedAt ?? '')}`
 
   return (
     <>
       <div className="pane-bar">
         <h2>Design</h2>
-        <div className="palette">
-          {ELEMENT_KINDS.map((k) => (
-            <button key={k} className="tool-btn" onClick={() => addEl(k)} title={`Přidat: ${KIND_LABEL[k]}`}>
-              <Icon.plus /> {KIND_LABEL[k]}
-            </button>
-          ))}
-        </div>
+        {screen && (
+          <span className="muted">
+            {screen.name} · {screen.width}×{screen.height}
+          </span>
+        )}
         <span className="spacer" />
-        <select className="field" style={{ width: 90 }} value={zoom} onChange={(e) => setZoom(Number(e.target.value))}>
-          {[0.25, 0.5, 0.75, 1, 1.25].map((z) => (
+        {s.project.figma && (
+          <span className="muted" style={{ fontSize: 11.5 }}>
+            Synchronizováno {new Date(s.project.figma.syncedAt).toLocaleString('cs-CZ')}
+          </span>
+        )}
+        <select className="field" style={{ width: 110 }} value={String(zoomPref)} onChange={(e) => setZoomPref(e.target.value === 'fit' ? 'fit' : Number(e.target.value))}>
+          <option value="fit">Přizpůsobit</option>
+          {[0.25, 0.5, 0.75, 1, 1.5, 2].map((z) => (
             <option key={z} value={z}>
               {Math.round(z * 100)} %
             </option>
           ))}
         </select>
-        <button className="tool-btn" onClick={() => setFigmaOpen(true)}>
-          <Icon.figma /> Import z Figmy
+        <button className={`tool-btn ${sync.busy ? 'is-busy' : ''}`} disabled={sync.busy} aria-busy={sync.busy} onClick={quickSync} title="Stáhnout aktuální design z Figmy">
+          {sync.busy ? <Spinner /> : <Icon.refresh />} {sync.busy ? 'Synchronizuji…' : 'Synchronizovat'}
         </button>
-        <button className={`tool-btn ${showEmbed ? 'pressed' : ''}`} onClick={() => setShowEmbed(!showEmbed)} title="Zobrazit soubor Figmy vedle plátna">
-          Figma náhled
+        <button className="tool-btn" onClick={() => setSetup(true)} title="Odkaz na soubor a token">
+          <Icon.figma /> Figma
         </button>
       </div>
-      <div className="split" style={{ gridTemplateColumns: showEmbed ? '1fr 1fr 280px' : '1fr 280px' }}>
-        <div className="canvas-wrap" onPointerDown={(e) => e.target === e.currentTarget && s.setFocus({ screenId: screen.id })}>
-          <div className="frame" style={{ width: screen.width * zoom, height: screen.height * zoom }} onPointerDown={(e) => e.target === e.currentTarget && s.setFocus({ screenId: screen.id })}>
-            <div className="frame-title">
-              {screen.name} · {screen.width}×{screen.height}
+      {screen ? (
+        <div className="canvas-wrap" ref={wrap} onPointerDown={(e) => e.target === e.currentTarget && select()}>
+          <div
+            className="frame figma-frame"
+            style={{ width: screen.width * zoom, height: screen.height * zoom }}
+            onPointerMove={(e) => setHovered(hitTest(e)?.id)}
+            onPointerLeave={() => setHovered()}
+            onPointerDown={(e) => select(hitTest(e)?.id)}
+          >
+            <div className="frame-title">{screen.name}</div>
+            <div className="frame-clip">
+              {imageUrl ? (
+                <img className="frame-image" src={imageUrl} alt={screen.name} draggable={false} />
+              ) : (
+                screen.elements.filter((el) => (depths.get(el.id) ?? 0) <= 1).map((el) => <div key={el.id} className="mark outline" style={box(el)} />)
+              )}
+              {screen.elements
+                .filter((el) => el.work && el.id !== selected?.id)
+                .map((el) => (
+                  <div key={el.id} className="mark work" style={box(el)} title={`Rozpracováno: ${el.name}`} />
+                ))}
+              {hoverEl && (
+                <div className="mark hover" style={box(hoverEl)}>
+                  <span className="mark-label">{hoverEl.name}</span>
+                </div>
+              )}
+              {selected && (
+                <div className={`mark selected ${selected.work ? 'is-work' : ''}`} style={box(selected)}>
+                  <span className="mark-label">
+                    {selected.name} · {selected.w}×{selected.h}
+                  </span>
+                </div>
+              )}
             </div>
-            {screen.elements.map((el) => (
-              <div
-                key={el.id}
-                className={`wire k-${el.kind} ${el.id === selectedId ? 'selected' : ''}`}
-                style={{ left: el.x * zoom, top: el.y * zoom, width: el.w * zoom, height: el.h * zoom, fontSize: Math.max(8, 13 * zoom) }}
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  s.setFocus({ screenId: screen.id, elementId: el.id })
-                  drag.current = { id: el.id, mode: 'move', sx: e.clientX, sy: e.clientY, orig: el }
-                }}
-                title={el.note || undefined}
-              >
-                <span className="wire-label">{el.kind === 'input' ? `${el.label}…` : el.label}</span>
-                {el.note && <span className="has-note" />}
-                {el.id === selectedId && (
-                  <span
-                    className="handle"
-                    onPointerDown={(e) => {
-                      e.stopPropagation()
-                      drag.current = { id: el.id, mode: 'resize', sx: e.clientX, sy: e.clientY, orig: el }
-                    }}
-                  />
-                )}
-              </div>
-            ))}
           </div>
         </div>
-        {showEmbed && (
-          <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--separator)' }}>
-            <div className="pane-bar">
-              <input
-                className="field"
-                placeholder="Odkaz na soubor nebo rámec ve Figmě"
-                value={embedUrl}
-                onChange={(e) => {
-                  setEmbedUrl(e.target.value)
-                  localStorage.setItem(`aforge.figmaEmbed.${s.project.id}`, e.target.value)
-                }}
-              />
-            </div>
-            {/figma\.com\//.test(embedUrl) ? (
-              <iframe title="Figma" style={{ flex: 1, border: 0 }} src={`https://www.figma.com/embed?embed_host=aforge&url=${encodeURIComponent(embedUrl)}`} allowFullScreen />
-            ) : (
-              <div className="empty">Vložte odkaz na Figmu – soubor se zobrazí zde a můžete ho porovnávat s wireframem.</div>
-            )}
+      ) : (
+        <div className="empty">
+          <div>
+            Design zatím není synchronizovaný z Figmy.
+            <p>Vložte odkaz na soubor ve Figmě – každý rámec (Frame) se stane obrazovkou.</p>
+            <button className="btn primary" onClick={() => setSetup(true)}>
+              <Icon.figma /> Připojit Figmu
+            </button>
           </div>
-        )}
-        <div className="inspector">
-          {selected ? (
-            <ElementInspector el={selected} onChange={(patch) => updateEl(selected.id, patch)} onDelete={removeSelected} />
-          ) : (
-            <ScreenInspector screen={screen} onChange={(patch) => updateScreen((sc) => ({ ...sc, ...patch }))} />
-          )}
         </div>
-      </div>
-      {figmaOpen && <FigmaDialog onClose={() => setFigmaOpen(false)} />}
+      )}
+      {setup && <FigmaDialog busy={sync.busy} onSync={async (url, token) => (await sync.run(url, token)) && setSetup(false)} onClose={() => setSetup(false)} />}
     </>
   )
 }
 
-const ScreenInspector = ({ screen, onChange }: { screen: Screen; onChange: (p: Partial<Screen>) => void }) => {
+// ---- layers panel ----------------------------------------------------------------------------
+
+export const LayersPanel = () => {
+  const { s, screen, selected, select } = useScreen()
+  const hover = useHovered()
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const listRef = useRef<HTMLDivElement>(null)
+
+  const children = useMemo(() => {
+    const m = new Map<string | undefined, DesignElement[]>()
+    for (const e of screen?.elements ?? []) m.set(e.parentId, [...(m.get(e.parentId) ?? []), e])
+    return m
+  }, [screen])
+
+  // The picked layer is always visible in the tree: its ancestors open up and it scrolls into view.
+  useEffect(() => {
+    if (!selected || !screen) return
+    const byId = new Map(screen.elements.map((e) => [e.id, e]))
+    const up: string[] = []
+    for (let p = selected.parentId; p; p = byId.get(p)?.parentId) up.push(p)
+    if (up.some((id) => !open.has(id))) setOpen((o) => new Set([...o, ...up]))
+    requestAnimationFrame(() => listRef.current?.querySelector('.layer-row.selected')?.scrollIntoView({ block: 'nearest' }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, screen?.id])
+
+  if (!screen) return <div className="empty">Žádná obrazovka z Figmy.</div>
+
+  const row = (e: DesignElement, depth: number, flat = false) => {
+    const kids = children.get(e.id)?.length ?? 0
+    const isOpen = open.has(e.id)
+    return (
+      <div key={e.id}>
+        <div
+          className={`layer-row ${e.id === selected?.id ? 'selected' : ''} ${e.id === hover ? 'hovered' : ''}`}
+          style={{ paddingLeft: 6 + (flat ? 0 : depth * 12) }}
+          onPointerEnter={() => setHovered(e.id)}
+          onPointerLeave={() => setHovered()}
+          onClick={() => select(e.id)}
+        >
+          <span
+            className={`layer-caret ${kids && !flat ? '' : 'none'}`}
+            onClick={(ev) => {
+              ev.stopPropagation()
+              setOpen((o) => {
+                const n = new Set(o)
+                if (n.has(e.id)) n.delete(e.id)
+                else n.add(e.id)
+                return n
+              })
+            }}
+          >
+            {kids && !flat ? (isOpen ? '▾' : '▸') : ''}
+          </span>
+          <span className="layer-glyph">{TYPE_GLYPH[e.type] ?? '•'}</span>
+          <span className="layer-name">{e.text && e.type === 'TEXT' ? e.text : e.name}</span>
+          {e.note && <span className="layer-note" title={e.note} />}
+          {e.storyIds.length > 0 && <span className="chip gray">{e.storyIds.length}</span>}
+          {e.work && (
+            <span className="chip work" title="Pracuje se na tom">
+              ●
+            </span>
+          )}
+        </div>
+        {!flat && isOpen && children.get(e.id)?.map((c) => row(c, depth + 1))}
+      </div>
+    )
+  }
+
+  const q = query.trim().toLowerCase()
+  const matches = q ? screen.elements.filter((e) => `${e.name} ${e.text ?? ''}`.toLowerCase().includes(q)).slice(0, 300) : null
+  const work = screen.elements.filter((e) => e.work)
+
+  return (
+    <div className="layers">
+      <div className="layers-head">
+        <select className="field" value={screen.id} onChange={(e) => s.setFocus({ screenId: e.target.value })}>
+          {s.project.screens.map((sc) => (
+            <option key={sc.id} value={sc.id}>
+              {sc.name}
+            </option>
+          ))}
+        </select>
+        <input className="field" placeholder="Hledat vrstvu" value={query} onChange={(e) => setQuery(e.target.value)} />
+      </div>
+      <div className="layers-list" ref={listRef}>
+        {matches ? matches.length ? matches.map((e) => row(e, 0, true)) : <div className="muted layers-empty">Nic nenalezeno.</div> : children.get(undefined)?.map((e) => row(e, 0))}
+      </div>
+      {work.length > 0 && (
+        <div className="layers-work">
+          <div className="side-header">Rozpracované ({work.length})</div>
+          {work.map((e) => row(e, 0, true))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---- inspector panel -------------------------------------------------------------------------
+
+export const DesignInspector = () => {
+  const { s, screen, selected, select } = useScreen()
+  if (!screen) return <div className="empty">Žádná obrazovka z Figmy.</div>
+  return (
+    <div className="inspector">
+      {selected ? <ElementInspector screen={screen} el={selected} onSelect={select} /> : <ScreenInspector screen={screen} onSelect={select} />}
+      {!selected && s.project.figma && (
+        <p className="muted" style={{ fontSize: 11.5 }}>
+          Tip: klikněte na objekt v náhledu nebo ve Vrstvách. Esc vybere nadřazenou vrstvu.
+        </p>
+      )}
+    </div>
+  )
+}
+
+const ScreenInspector = ({ screen, onSelect }: { screen: Screen; onSelect: (id?: string) => void }) => {
   const s = useStudio()
   const linked = s.project.stories.filter((st) => st.screenIds.includes(screen.id))
+  const work = screen.elements.filter((e) => e.work)
+  const link = figmaLink(s.project.figma?.url, screen.figmaId)
   return (
     <>
       <h3>Obrazovka</h3>
       <div className="group-box">
-        <div className="form-row" style={{ gridTemplateColumns: '60px 1fr' }}>
-          <label>Název</label>
-          <input className="field" value={screen.name} onChange={(e) => onChange({ name: e.target.value })} />
+        <div style={{ fontWeight: 600 }}>{screen.name}</div>
+        <div className="muted">
+          {screen.width}×{screen.height} · {screen.elements.length} vrstev
         </div>
-        <div className="form-row" style={{ gridTemplateColumns: '60px 1fr' }}>
-          <label>Velikost</label>
-          <select
-            className="field"
-            value={`${screen.width}x${screen.height}`}
-            onChange={(e) => {
-              const [w, h] = e.target.value.split('x').map(Number)
-              onChange({ width: w, height: h })
-            }}
-          >
-            {SIZES.map((z) => (
-              <option key={z.label} value={`${z.w}x${z.h}`}>
-                {z.label}
-              </option>
-            ))}
-            {!SIZES.some((z) => z.w === screen.width && z.h === screen.height) && <option value={`${screen.width}x${screen.height}`}>{`${screen.width}×${screen.height}`}</option>}
-          </select>
-        </div>
+        {link && (
+          <a className="btn small" style={{ marginTop: 8 }} href={link} target="_blank" rel="noreferrer">
+            <Icon.figma /> Otevřít ve Figmě
+          </a>
+        )}
+      </div>
+      <h3>Rozpracované prvky</h3>
+      <div className="group-box">
+        {work.length ? (
+          work.map((e) => (
+            <button key={e.id} className="side-link" onClick={() => onSelect(e.id)}>
+              <span className="chip work">●</span>
+              <span>{e.name}</span>
+            </button>
+          ))
+        ) : (
+          <span className="muted">Vyberte objekt a zvolte „Pracovat na tomto prvku“.</span>
+        )}
       </div>
       <h3>Stories na této obrazovce</h3>
       <div className="group-box">
-        {linked.length ? linked.map((st) => <div key={st.id}>{st.id} · {st.title}</div>) : <span className="muted">Žádná story ji zatím nepoužívá.</span>}
+        {linked.length ? (
+          linked.map((st) => (
+            <div key={st.id}>
+              {st.id} · {st.title}
+            </div>
+          ))
+        ) : (
+          <span className="muted">Žádná story ji zatím nepoužívá.</span>
+        )}
       </div>
-      <button
-        className="btn danger"
-        disabled={s.project.screens.length < 2}
-        onClick={() => {
-          s.update((p) => ({ ...p, screens: p.screens.filter((x) => x.id !== screen.id) }))
-          s.setFocus({})
-        }}
-      >
-        <Icon.trash /> Smazat obrazovku
-      </button>
-      <p className="muted" style={{ fontSize: 11.5, marginTop: 16 }}>
-        Tip: prvky přidáte z lišty nahoře, posouváte tažením (Alt = bez přichytávání), šipky posunou o 1 px (⇧ o 8 px), ⌘D duplikuje, Backspace maže.
-      </p>
     </>
   )
 }
 
-const ElementInspector = ({ el, onChange, onDelete }: { el: WireElement; onChange: (p: Partial<WireElement>) => void; onDelete: () => void }) => {
+const ElementInspector = ({ screen, el, onSelect }: { screen: Screen; el: DesignElement; onSelect: (id?: string) => void }) => {
   const s = useStudio()
-  const num = (k: 'x' | 'y' | 'w' | 'h') => (
-    <input className="field" type="number" value={Math.round(el[k])} onChange={(e) => onChange({ [k]: Number(e.target.value) })} />
-  )
+  const patch = (p: Partial<DesignElement>) => updateElement(s.update, screen.id, el.id, p)
+  const link = figmaLink(s.project.figma?.url, el.figmaId)
+  const parent = el.parentId ? screen.elements.find((e) => e.id === el.parentId) : undefined
   return (
     <>
-      <h3>Prvek</h3>
+      <h3>Objekt</h3>
       <div className="group-box">
-        <div className="form-row" style={{ gridTemplateColumns: '60px 1fr' }}>
-          <label>Druh</label>
-          <select className="field" value={el.kind} onChange={(e) => onChange({ kind: e.target.value as WireElement['kind'] })}>
-            {ELEMENT_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {KIND_LABEL[k]}
-              </option>
-            ))}
-          </select>
+        <div style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{el.name}</div>
+        <div className="muted">
+          {[el.type, `${el.x},${el.y}`, `${el.w}×${el.h}`].filter(Boolean).join(' · ')}
         </div>
-        <div className="form-row" style={{ gridTemplateColumns: '60px 1fr' }}>
-          <label>Popisek</label>
-          <input className="field" value={el.label} onChange={(e) => onChange({ label: e.target.value })} />
+        {el.text && el.type === 'TEXT' && <div className="element-text">„{el.text}“</div>}
+        <button className={`btn work-toggle ${el.work ? 'primary' : ''}`} onClick={() => patch({ work: !el.work })}>
+          {el.work ? (
+            <>
+              <Icon.check /> Pracuje se na tom
+            </>
+          ) : (
+            'Pracovat na tomto prvku'
+          )}
+        </button>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+          {parent && (
+            <button className="btn small" onClick={() => onSelect(parent.id)} title={parent.name}>
+              ↑ Nadřazený
+            </button>
+          )}
+          {link && (
+            <a className="btn small" href={link} target="_blank" rel="noreferrer">
+              <Icon.figma /> Ve Figmě
+            </a>
+          )}
         </div>
-        <div className="form-row" style={{ gridTemplateColumns: '60px 1fr 1fr' }}>
-          <label>X / Y</label>
-          {num('x')}
-          {num('y')}
-        </div>
-        <div className="form-row" style={{ gridTemplateColumns: '60px 1fr 1fr' }}>
-          <label>Š / V</label>
-          {num('w')}
-          {num('h')}
-        </div>
-        <div className="form-row top" style={{ gridTemplateColumns: '60px 1fr' }}>
-          <label>Poznámka</label>
-          <textarea className="field" rows={3} placeholder="Chování, validace, data… (jde agentovi i do specifikace)" value={el.note} onChange={(e) => onChange({ note: e.target.value })} />
-        </div>
+      </div>
+      <h3>Poznámka</h3>
+      <div className="group-box">
+        <textarea
+          className="field"
+          rows={4}
+          style={{ width: '100%' }}
+          placeholder="Chování, validace, data… (jde agentovi i do specifikace)"
+          value={el.note}
+          onChange={(e) => patch({ note: e.target.value })}
+        />
       </div>
       <h3>Stories</h3>
       <div className="group-box">
         {s.project.stories.length === 0 && <span className="muted">Zatím žádné stories.</span>}
         {s.project.stories.map((st) => (
-          <label key={st.id} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '2px 0' }}>
+          <label
+            key={st.id}
+            style={{
+              display: 'flex',
+              gap: 6,
+              alignItems: 'center',
+              padding: '2px 0',
+            }}
+          >
             <input
               type="checkbox"
               checked={el.storyIds.includes(st.id)}
-              onChange={(e) => onChange({ storyIds: e.target.checked ? [...el.storyIds, st.id] : el.storyIds.filter((x) => x !== st.id) })}
+              onChange={(e) =>
+                patch({
+                  storyIds: e.target.checked ? [...el.storyIds, st.id] : el.storyIds.filter((x) => x !== st.id),
+                })
+              }
             />
             <span className="chip gray">{st.id}</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.title}</span>
+            <span
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {st.title}
+            </span>
           </label>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn" onClick={() => void s.askAgent({ text: `Posuď prvek ${el.id} („${el.label}“) – sedí na stories? Co chybí?` })}>
-          <Icon.sparkles /> Zeptat se agenta
-        </button>
-        <button className="btn danger" onClick={onDelete}>
-          <Icon.trash />
-        </button>
-      </div>
+      <button
+        className="btn"
+        onClick={() =>
+          void s.askAgent({
+            text: `Posuď objekt ${el.id} („${el.name}“) na obrazovce ${screen.name} – co má dělat, sedí na stories, co chybí?`,
+          })
+        }
+      >
+        <Icon.sparkles /> Zeptat se agenta
+      </button>
     </>
   )
 }
 
-const FigmaDialog = ({ onClose }: { onClose: () => void }) => {
-  const s = useStudio()
-  const [url, setUrl] = useState('')
-  const [token, setToken] = useState(() => sessionStorage.getItem('aforge.figmaToken') ?? '')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const run = async () => {
-    setBusy(true)
-    setError('')
-    try {
-      await s.flush()
-      sessionStorage.setItem('aforge.figmaToken', token)
-      const before = new Set(s.project.screens.map((x) => x.id))
-      await api<Project>(`/projects/${s.project.id}/figma`, { body: { url, token } })
-      await s.reload()
-      const fresh = await api<Project>(`/projects/${s.project.id}`)
-      const added = fresh.screens.filter((x) => !before.has(x.id))
-      s.toast(`Importováno ${added.length} obrazovek z Figmy.`)
-      if (added[0]) s.setFocus({ screenId: added[0].id })
-      onClose()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
+// ---- live Figma panel ------------------------------------------------------------------------
+
+/** Figma's embed is view-only; editing happens in Figma itself. */
+export const FigmaPanel = () => {
+  const { s, screen, selected } = useScreen()
+  const [follow, setFollow] = useState(false)
+  const node = follow && selected ? selected.figmaId : screen?.figmaId
+  const url = figmaLink(s.project.figma?.url, node || undefined)
   return (
-    <Dialog onClose={onClose} width={520}>
-      <h3>Import z Figmy</h3>
+    <div className="figma-panel">
+      <div className="pane-bar">
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> Sledovat vybraný objekt
+        </label>
+        <span className="spacer" />
+        {url && (
+          <a className="tool-btn" href={url} target="_blank" rel="noreferrer" title="Otevřít v editoru Figmy">
+            Upravit ve Figmě ↗
+          </a>
+        )}
+      </div>
+      {url ? (
+        <iframe key={url} title="Figma" className="figma-embed" src={`https://www.figma.com/embed?embed_host=aforge&url=${encodeURIComponent(url)}`} allowFullScreen />
+      ) : (
+        <div className="empty">Nejdřív připojte soubor ve Figmě (Design → Figma).</div>
+      )}
+    </div>
+  )
+}
+
+// ---- setup dialog ----------------------------------------------------------------------------
+
+const FigmaDialog = ({ busy, onSync, onClose }: { busy: boolean; onSync: (url: string, token: string) => Promise<unknown>; onClose: () => void }) => {
+  const s = useStudio()
+  const [url, setUrl] = useState(s.project.figma?.url ?? '')
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? '')
+  return (
+    <Dialog onClose={onClose} width={540}>
+      <h3>Figma</h3>
       <p className="muted" style={{ marginTop: 0 }}>
-        Každý rámec (Frame) se stane obrazovkou, jeho vrstvy prvky wireframu. Odkaz s <code>node-id</code> naimportuje jen vybraný rámec.
+        Design se dělá ve Figmě. Synchronizace stáhne rámce (Frame) jako obrazovky i s jejich vrstvami a náhledem; poznámky, stories a rozpracované prvky v Reactoru zůstanou. Odkaz s{' '}
+        <code>node-id</code> synchronizuje jen vybraný rámec nebo sekci.
       </p>
       <div className="form-row">
         <label>Odkaz</label>
@@ -385,18 +560,17 @@ const FigmaDialog = ({ onClose }: { onClose: () => void }) => {
       </div>
       <div className="form-row">
         <label>Osobní token</label>
-        <input className="field" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="figd_…" />
+        <input className="field" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="figd_… (nebo FIGMA_TOKEN na serveru)" />
       </div>
       <p className="muted" style={{ fontSize: 11.5 }}>
-        Token vytvoříte ve Figmě v Settings → Security → Personal access tokens (stačí File content: read). Zůstává jen v této záložce prohlížeče.
+        Token vytvoříte ve Figmě v Settings → Security → Personal access tokens (stačí File content: read). Uloží se jen v tomto prohlížeči.
       </p>
-      {error && <div style={{ color: 'var(--red)' }}>{error}</div>}
       <div className="dialog-actions">
         <button className="btn" onClick={onClose}>
           Zrušit
         </button>
-        <button className="btn primary" disabled={!url || !token || busy} onClick={() => void run()}>
-          {busy ? 'Importuji…' : 'Importovat'}
+        <button className="btn primary" disabled={!url || busy} onClick={() => void onSync(url, token)}>
+          {busy ? 'Synchronizuji…' : 'Synchronizovat'}
         </button>
       </div>
     </Dialog>

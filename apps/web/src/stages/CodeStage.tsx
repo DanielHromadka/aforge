@@ -1,18 +1,14 @@
-// Advanced view: the generated workspace as a Finder-like tree, Monaco to read and edit, and the git
-// history of builds and accepted agent changes.
+// Advanced view: the generated workspace as a Finder-like tree with Monaco to read and edit, or the Git
+// view with the commit graph of builds and accepted agent changes.
 import { useCallback, useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import type { FileEntry } from '@aforge/shared'
 import { api } from '../api'
 import { Icon } from '../icons'
+import { reposOf } from '@aforge/shared'
 import { useStudio } from '../studio'
 import { darkMode, languageOf } from '../monaco'
-
-interface Commit {
-  hash: string
-  date: string
-  subject: string
-}
+import { GitView } from './GitView'
 
 const TreeRows = ({ entries, depth, open, toggle, current, select }: {
   entries: FileEntry[]
@@ -43,18 +39,21 @@ const TreeRows = ({ entries, depth, open, toggle, current, select }: {
 export const CodeStage = () => {
   const s = useStudio()
   const pid = s.project.id
+  const repos = reposOf(s.project)
+  const [repo, setRepo] = useState(() => repos[0]!.id)
+  const q = `repo=${encodeURIComponent(repo)}`
   const [tree, setTree] = useState<FileEntry[]>([])
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [content, setContent] = useState<string>('')
   const [saved, setSaved] = useState<string>('')
-  const [history, setHistory] = useState<Commit[]>([])
-  const [diff, setDiff] = useState<{ hash: string; text: string } | null>(null)
+  const [mode, setMode] = useState<'files' | 'git'>('files')
+  const [nonce, setNonce] = useState(0)
   const path = s.focus.filePath
 
   const refresh = useCallback(async () => {
-    setTree(await api<FileEntry[]>(`/projects/${pid}/files`))
-    setHistory(await api<Commit[]>(`/projects/${pid}/history`))
-  }, [pid])
+    setTree(await api<FileEntry[]>(`/projects/${pid}/files?${q}`))
+    setNonce((n) => n + 1)
+  }, [pid, q])
 
   useEffect(() => {
     void refresh()
@@ -62,22 +61,21 @@ export const CodeStage = () => {
 
   useEffect(() => {
     if (!path) return
-    setDiff(null)
-    api<{ content: string }>(`/projects/${pid}/file?path=${encodeURIComponent(path)}`)
+    api<{ content: string }>(`/projects/${pid}/file?path=${encodeURIComponent(path)}&${q}`)
       .then((r) => {
         setContent(r.content)
         setSaved(r.content)
       })
       .catch((e: Error) => s.toast(e.message, true))
-  }, [path, pid, s.toast])
+  }, [path, pid, q, s.toast])
 
   const dirty = content !== saved
 
   const save = useCallback(async () => {
-    if (!path || !dirty) return
-    await api(`/projects/${pid}/file`, { method: 'PUT', body: { path, content } })
+    if (s.readOnly || !path || !dirty) return
+    await api(`/projects/${pid}/file?${q}`, { method: 'PUT', body: { path, content } })
     setSaved(content)
-  }, [path, dirty, pid, content])
+  }, [path, dirty, pid, q, content, s.readOnly])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -96,34 +94,45 @@ export const CodeStage = () => {
     <>
       <div className="pane-bar">
         <h2>Kód</h2>
-        <span className="muted mono">{diff ? `commit ${diff.hash}` : (path ?? 'Vyberte soubor')}</span>
+        {repos.length > 1 && <select className="field" style={{ width: 'auto' }} aria-label="Repozitář" value={repo} onChange={(e) => { setRepo(e.target.value); s.setFocus({ ...s.focus, filePath: undefined }) }}>
+          {repos.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>}
+        <div className="segmented">
+          <button className={mode === 'files' ? 'active' : ''} onClick={() => setMode('files')}>Soubory</button>
+          <button className={mode === 'git' ? 'active' : ''} onClick={() => setMode('git')}>Git</button>
+        </div>
+        {mode === 'files' && <span className="muted mono">{path ?? 'Vyberte soubor'}</span>}
         {dirty && <span className="chip orange">Neuloženo</span>}
         <span className="spacer" />
         <button className="tool-btn" onClick={() => void refresh()} title="Obnovit">
           <Icon.refresh />
         </button>
-        <button className="btn" disabled={!dirty} onClick={() => void save()}>
-          Uložit ⌘S
-        </button>
+        {mode === 'files' && (
+          <button className="btn" disabled={s.readOnly || !dirty} onClick={() => void save()}>
+            Uložit ⌘S
+          </button>
+        )}
         <button
           className="btn"
+          disabled={s.readOnly}
           onClick={async () => {
-            const r = await api<{ hash: string | null }>(`/projects/${pid}/commit`, { body: {} })
+            const r = await api<{ hash: string | null }>(`/projects/${pid}/commit?${q}`, { body: {} })
             s.toast(r.hash ? `Commit ${r.hash}` : 'Žádné změny ke commitu')
             void refresh()
           }}
         >
           Commit
         </button>
-        <button className="btn" disabled={!path} onClick={() => void s.askAgent({ text: `Projdi soubor ${path}: odpovídá stories a konvencím projektu? Navrhni případné opravy.` })}>
+        {mode === 'files' && <button className="btn" disabled={s.readOnly || !path} onClick={() => void s.askAgent({ text: `Projdi soubor ${path}: odpovídá stories a konvencím projektu? Navrhni případné opravy.` })}>
           <Icon.sparkles /> Revize agentem
-        </button>
+        </button>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr 240px', flex: 1, minHeight: 0 }}>
+      {mode === 'git' ? <GitView pid={pid} repo={repo} nonce={nonce} toast={s.toast} /> : (
+      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', flex: 1, minHeight: 0 }}>
         <div className="tree">
           {tree.length === 0 ? (
             <div className="muted" style={{ padding: 8 }}>
-              Pracovní adresář je prázdný. Spusťte Build.
+              Repozitář je zatím prázdný.
             </div>
           ) : (
             <TreeRows
@@ -137,38 +146,21 @@ export const CodeStage = () => {
           )}
         </div>
         <div style={{ minWidth: 0, minHeight: 0 }}>
-          {diff ? (
-            <Editor theme={theme} language="plaintext" value={diff.text} options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12 }} />
-          ) : path ? (
+          {path ? (
             <Editor
               theme={theme}
-              path={path}
+              path={`${pid}/${repo}/${path}`}
               language={languageOf(path)}
               value={content}
               onChange={(v) => setContent(v ?? '')}
-              options={{ minimap: { enabled: false }, fontSize: 12.5, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2 }}
+              options={{ readOnly: s.readOnly, minimap: { enabled: false }, fontSize: 12.5, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2 }}
             />
           ) : (
             <div className="empty">Vyberte soubor ve stromu vlevo.</div>
           )}
         </div>
-        <div className="inspector" style={{ padding: 8 }}>
-          <h3 style={{ padding: '0 4px' }}>Historie</h3>
-          {history.map((c) => (
-            <div
-              key={c.hash}
-              className={`tree-row ${diff?.hash === c.hash ? 'current' : ''}`}
-              style={{ height: 'auto', padding: '4px 6px', display: 'block', whiteSpace: 'normal' }}
-              onClick={async () => setDiff({ hash: c.hash, text: (await api<{ diff: string }>(`/projects/${pid}/history/${c.hash}`)).diff })}
-            >
-              <div style={{ fontWeight: 500 }}>{c.subject}</div>
-              <div className="muted" style={{ fontSize: 11 }}>
-                <span className="mono">{c.hash}</span> · {new Date(c.date).toLocaleString('cs')}
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
+      )}
     </>
   )
 }

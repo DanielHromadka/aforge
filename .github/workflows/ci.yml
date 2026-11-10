@@ -1,0 +1,45 @@
+name: Verify and release
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run release
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Validate production configuration
+        run: |
+          npm run production:config -- --app app.example.com --auth auth.example.com --relay relay.example.com --preview example-preview.net --out /tmp/reactor-config
+          docker compose --env-file /tmp/reactor-config/production.env -f deploy/production/compose.yaml config --quiet
+          bash -n deploy/production/*.sh deploy/production/agent/entrypoint.sh
+      - name: Build deployable job images
+        run: |
+          docker build -f deploy/production/agent/Dockerfile -t reactor-agent:latest .
+          docker build -f deploy/production/egress/Dockerfile -t reactor-egress:latest .
+          docker build -f deploy/production/model-gateway/Dockerfile -t reactor-model-gateway:latest .
+          docker build -f deploy/production/ingress/Dockerfile -t reactor-ingress:latest .
+          docker build -f deploy/production/playwright/Dockerfile -t reactor-playwright:latest .
+          docker build -f apps/relay/Dockerfile -t reactor-relay:latest .
+      - name: Verify sandbox and egress without calling a model
+        run: |
+          node --import tsx scripts/verify-isolation.mjs
+          docker build -t aforge-runtime:latest runtime
+          node --import tsx scripts/verify-preview.mjs
+          node --import tsx scripts/verify-backup-flow.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reactor-release
+          path: |
+            .releases/*.tar.gz
+            .releases/*.sha256
+          retention-days: 30

@@ -25,7 +25,7 @@ describe('protocol', () => {
   })
 
   it('round-trips enrollment tokens and rejects junk', () => {
-    const e = { v: PROTOCOL_VERSION, relay: 'wss://relay.example.com', room: roomOf(newSecret()), id: newWorkerId(), key: newWorkerKey(), hub: 'aForge' }
+    const e = { v: PROTOCOL_VERSION, relay: 'wss://relay.example.com', room: roomOf(newSecret()), id: newWorkerId(), key: newWorkerKey(), hub: 'Reactor' }
     expect(parseEnrollment(enrollmentToken(e))).toEqual(e)
     expect(() => parseEnrollment('afw1.e30')).toThrow()
     expect(() => parseEnrollment('nope')).toThrow()

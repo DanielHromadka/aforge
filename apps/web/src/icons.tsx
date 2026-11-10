@@ -155,6 +155,37 @@ export const Icon = {
       <circle cx="8" cy="6.5" r="1.5" />
     </I>
   ),
+  users: () => (
+    <I>
+      <circle cx="6" cy="5.5" r="2.3" />
+      <path d="M1.8 13.2c.4-2.3 2.1-3.6 4.2-3.6s3.8 1.3 4.2 3.6" />
+      <path d="M10.6 3.4a2.2 2.2 0 0 1 0 4.2M11.8 9.8c1.3.4 2.2 1.6 2.4 3.4" />
+    </I>
+  ),
+  gear: () => (
+    <I>
+      <circle cx="8" cy="8" r="2.1" />
+      <path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7 3.6 3.6" />
+    </I>
+  ),
+  back: () => (
+    <I>
+      <path d="M10 3 5 8l5 5" />
+    </I>
+  ),
+  logout: () => (
+    <I>
+      <path d="M6.5 2.5H3.5v11h3M10.5 5l3 3-3 3M13.5 8H6.5" />
+    </I>
+  ),
+  grid: () => (
+    <I>
+      <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.2" />
+      <rect x="9" y="2.5" width="4.5" height="4.5" rx="1.2" />
+      <rect x="2.5" y="9" width="4.5" height="4.5" rx="1.2" />
+      <rect x="9" y="9" width="4.5" height="4.5" rx="1.2" />
+    </I>
+  ),
 }
 
 export type IconName = keyof typeof Icon

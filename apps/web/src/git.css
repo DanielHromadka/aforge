@@ -1,0 +1,319 @@
+/* Git view of the Code stage (commit graph, details, diff), ported from aFinder's features/git.css
+   onto the Finder tokens of styles.css. Lane colours live here as they only exist in the graph. */
+
+:root {
+  --git-lane-0: #007aff;
+  --git-lane-1: #e8590c;
+  --git-lane-2: #2f9e44;
+  --git-lane-3: #ae3ec9;
+  --git-lane-4: #d6a100;
+  --git-lane-5: #0c8599;
+  --git-lane-6: #c2255c;
+  --git-lane-7: #5c7cfa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --git-lane-0: #0a84ff;
+    --git-lane-1: #ff922b;
+    --git-lane-2: #51cf66;
+    --git-lane-3: #da77f2;
+    --git-lane-4: #ffd43b;
+    --git-lane-5: #3bc9db;
+    --git-lane-6: #f06595;
+    --git-lane-7: #91a7ff;
+  }
+}
+
+:root[data-theme='dark'] {
+  --git-lane-0: #0a84ff;
+  --git-lane-1: #ff922b;
+  --git-lane-2: #51cf66;
+  --git-lane-3: #da77f2;
+  --git-lane-4: #ffd43b;
+  --git-lane-5: #3bc9db;
+  --git-lane-6: #f06595;
+  --git-lane-7: #91a7ff;
+}
+
+.git-view {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  background: var(--content);
+}
+
+.git-view.with-details {
+  grid-template-rows: minmax(120px, 2fr) minmax(0, 3fr);
+}
+
+/* ---- graph list ---- */
+
+.git-list {
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+  user-select: none;
+}
+
+.git-head,
+.git-row {
+  display: grid;
+  align-items: center;
+  column-gap: 8px;
+  padding-right: 10px;
+}
+
+.git-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 26px;
+  background: var(--content);
+  border-bottom: 1px solid var(--separator);
+  color: var(--label-2);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.git-head > div:first-child {
+  padding-left: 8px;
+}
+
+.git-row {
+  height: 26px;
+  margin: 0 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.git-row:nth-child(odd of .git-row) {
+  background: var(--stripe);
+}
+
+.git-row:hover {
+  background: var(--control-hover);
+}
+
+.git-row.selected {
+  background: var(--accent);
+  color: #fff;
+}
+
+.git-row.work .git-subject {
+  font-style: italic;
+  color: var(--label-2);
+}
+
+.git-row.selected .git-hash,
+.git-row.selected .git-author,
+.git-row.selected .git-when,
+.git-row.selected.work .git-subject {
+  color: inherit;
+}
+
+.git-lanes {
+  height: 26px;
+  overflow: hidden;
+}
+
+.git-cell {
+  display: block;
+  stroke-width: 1.6;
+  fill: none;
+}
+
+.git-cell circle.hollow {
+  fill: var(--content);
+  stroke-width: 1.6;
+}
+
+.git-row.selected .git-cell circle {
+  stroke: #fff !important;
+}
+
+.git-subject,
+.git-author {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-author,
+.git-when {
+  color: var(--label-2);
+  font-size: 12px;
+}
+
+.git-hash {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--label-2);
+}
+
+.git-ref {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  margin-right: 5px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  vertical-align: 1px;
+  color: color-mix(in srgb, var(--green) 75%, var(--label));
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+}
+
+.git-ref.head {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.git-ref.remote {
+  color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 16%, transparent);
+}
+
+.git-ref.tag {
+  color: color-mix(in srgb, var(--orange) 80%, var(--label));
+  background: color-mix(in srgb, var(--orange) 18%, transparent);
+}
+
+.git-row.selected .git-ref {
+  color: var(--accent);
+  background: var(--content);
+}
+
+/* ---- details: meta + files | diff ---- */
+
+.git-details {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  min-height: 0;
+  border-top: 1px solid var(--separator);
+}
+
+.git-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--window);
+  border-right: 1px solid var(--separator);
+}
+
+.git-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 45%;
+  padding: 10px 12px;
+  overflow: auto;
+  border-bottom: 1px solid var(--separator);
+  font-size: 12px;
+  user-select: text;
+}
+
+.git-message {
+  margin: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.git-hashes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.git-hashes a {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.git-files-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 4px;
+  color: var(--label-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.git-files {
+  flex: 1;
+  min-height: 0;
+  padding: 0 6px 6px;
+  overflow: auto;
+  user-select: none;
+}
+
+.git-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.git-file:hover {
+  background: var(--control-hover);
+}
+
+.git-file.current {
+  background: var(--accent-soft);
+}
+
+.git-file-name {
+  flex-shrink: 0;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-file.deleted .git-file-name {
+  text-decoration: line-through;
+}
+
+.git-file-dir {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--label-2);
+  font-size: 11px;
+}
+
+.git-state {
+  width: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  color: color-mix(in srgb, var(--orange) 85%, var(--label));
+}
+
+.git-file.added .git-state,
+.git-file.untracked .git-state { color: color-mix(in srgb, var(--green) 80%, var(--label)); }
+.git-file.deleted .git-state,
+.git-file.conflict .git-state { color: var(--red); }
+.git-file.renamed .git-state { color: var(--accent); }
+
+.git-diff {
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 760px) {
+  .git-details { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+}

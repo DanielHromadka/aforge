@@ -23,7 +23,7 @@ packages/shared – doménový model + zod schémata (= JSON schéma odpovědi a
 - **Agent nemění projekt přímo.** Odpověď konzultanta je validovaná proti `AgentReplySchema` (zod → JSON Schema → `--json-schema` u Claude Code, resp. `output_config.format` u API). Změny jsou `ops` (`story.upsert`, `element.upsert`, `block.upsert`, `file.write`, …), které se aplikují až po přijetí (`applyOps` + zápis souborů + git commit).
 - **Kontext** se skládá při každém dotazu (`context.ts`): celý model, seznam souborů, otevřené anotace, poslední testy, fokus uživatele (+ obsah otevřeného souboru) a posledních 12 zpráv.
 - **Běhový kontrakt** generované aplikace (viz `build.ts`): `.aforge/start.sh` zkopíruje `/workspace` (ro) do `/app`, sestaví, spustí backend na :5000 a Nginx na :80 (`/` SPA, `/api/` proxy). Díky tomu je jedno, jestli je backend .NET, Node nebo Python.
-- **Anotace jako v Lovable**: náhled jde přes vlastní proxy na náhodném portu, která do HTML vkládá `inspector.js`. Ten komunikuje s aForge jen přes `postMessage` (výběr prvku, změna route, zvýraznění anotace), takže nevyžaduje stejný origin.
+- **Anotace jako v Lovable**: náhled jde přes vlastní proxy na náhodném portu, která do HTML vkládá `inspector.js`. Ten komunikuje s Reactor jen přes `postMessage` (výběr prvku, změna route, zvýraznění anotace), takže nevyžaduje stejný origin.
 - **Testy ↔ stories** přes `[US-x]` v názvu testu; prošlé testy posunou story do stavu *ověřeno*, padající ji vrátí na *implementováno*.
 - **Procesy** se spouštějí s polem argumentů (`proc.ts`), nikdy přes shell řetězec; cesty z klienta jdou přes `safePath`.
 
@@ -45,8 +45,8 @@ apps/server/pipeline.ts (orchestrátor → plán → úlohy podle závislostí)
 
 ## Roadmapa
 
-1. Implementační agent uvnitř sandbox kontejneru (stejný `aforge-runtime` + připojený workspace), bez přístupu k hostiteli; testy i náhled na workerech s Dockerem.
-2. Nasazení: generování Bicep/Terraform + GitHub Actions / Azure DevOps pipeline pro zvolený hosting.
+1. Produkční agenti a Playwright již používají omezenou dočasnou kopii repozitáře v kontejnerech, validovaný export souborů a filtr odchozí sítě; další krok je izolace workerů do samostatných VM pro veřejné nedůvěryhodné zákazníky.
+2. Nasazení na jeden Linux server za Cloudflare Tunnel, privátní R2, CI/release/deploy, systemd a zálohy: `deploy/production/INSTALL.md`. Více replik vyžaduje změnu úložiště.
 3. Více uživatelů (Entra ID), sdílené projekty, role (analytik, designér, vývojář, tester).
 4. Vizuální regrese: screenshoty testů vs. wireframy, posouzení agentem s obrázky.
 5. Obousměrná synchronizace s Figmou (plugin), komponentová knihovna firmy.

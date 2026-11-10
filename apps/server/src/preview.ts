@@ -5,21 +5,28 @@ import net from 'node:net'
 import type { AddressInfo } from 'node:net'
 import type { PreviewStatus } from '@aforge/shared'
 import { publish } from './events.js'
-import { run, streamLines } from '@aforge/runner'
-import { workspaceDir } from './store.js'
+import { run, streamLines, createJobNetwork, removeJobNetwork, proxyArgs } from '@aforge/runner'
+import { loadProject, workspaceDir } from './store.js'
+import { repoDir } from './project-locations.js'
+import { reposOf } from '@aforge/shared'
 import { INSPECTOR_JS } from './inspector.js'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { limits, previewDomain } from './config.js'
+import { previewAddress } from './preview-access.js'
+import { assertDiskCapacity } from './operations.js'
 
 export const RUNTIME_IMAGE = process.env.AFORGE_RUNTIME_IMAGE ?? 'aforge-runtime:latest'
 
 export const containerName = (id: string) => `aforge-app-${id}`
+const ingressName = (id: string) => `aforge-ingress-${id}`
 export const networkName = (id: string) => `aforge-net-${id}`
 
 interface Running {
   status: PreviewStatus
   proxy?: http.Server
   stopLogs?: () => void
+  idle?: ReturnType<typeof setTimeout>
 }
 
 const previews = new Map<string, Running>()
@@ -33,7 +40,7 @@ const appendLog = (r: Running, projectId: string, line: string) => {
 
 const setState = (r: Running, projectId: string, patch: Partial<PreviewStatus>) => {
   Object.assign(r.status, patch)
-  publish(projectId, 'preview', 'status', r.status.state, { ...r.status, log: undefined })
+  publish(projectId, 'preview', 'status', r.status.state, { ...r.status, log: patch.log === '' ? '' : undefined })
 }
 
 export const previewStatus = (projectId: string): PreviewStatus =>
@@ -46,9 +53,14 @@ const injectInspector = (html: string) => {
   return html + tag
 }
 
-const startProxy = (target: number): Promise<http.Server> =>
+const touchPreview = (id: string) => {
+  const r = previews.get(id); if (!r || r.status.state !== 'running') return
+  clearTimeout(r.idle); r.idle = setTimeout(() => void stopPreview(id), limits.previewMinutes * 60_000); r.idle.unref()
+}
+const startProxy = (target: number, projectId: string): Promise<http.Server> =>
   new Promise((resolve) => {
     const server = http.createServer((req, res) => {
+      touchPreview(projectId)
       if (req.url === '/__aforge/inspector.js') {
         res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-store' })
         res.end(INSPECTOR_JS)
@@ -116,17 +128,34 @@ const waitForHttp = async (port: number, isAlive: () => boolean, timeoutMs: numb
 
 export const stopPreview = async (projectId: string) => {
   const r = previews.get(projectId)
+  clearTimeout(r?.idle)
   r?.stopLogs?.()
   r?.proxy?.close()
-  await run('docker', ['rm', '-f', containerName(projectId)])
+  await run('docker', ['rm', '-f', containerName(projectId), ingressName(projectId)])
+  await removeJobNetwork(networkName(projectId))
   if (r) setState(r, projectId, { state: 'stopped', url: undefined, message: 'Zastaveno' })
 }
 
+const starting = new Set<string>()
 export const startPreview = async (projectId: string) => {
+  if (starting.has(projectId)) throw Object.assign(new Error('Náhled se již spouští.'), { statusCode: 409 })
+  const active = new Set([...starting, ...[...previews.entries()].filter(([, r]) => ['starting', 'running'].includes(r.status.state)).map(([id]) => id)])
+  active.delete(projectId)
+  if (active.size >= limits.previews) throw Object.assign(new Error('Byl dosažen limit souběžných náhledů.'), { statusCode: 429 })
+  starting.add(projectId)
+  try { await launchPreview(projectId) }
+  catch (error) {
+    await stopPreview(projectId)
+    const r = previews.get(projectId); if (r) setState(r, projectId, { state: 'error', message: (error as Error).message })
+    throw error
+  } finally { starting.delete(projectId) }
+}
+const launchPreview = async (projectId: string) => {
+  await assertDiskCapacity()
   await stopPreview(projectId)
   const r: Running = { status: { state: 'starting', log: '' } }
   previews.set(projectId, r)
-  setState(r, projectId, { state: 'starting', message: 'Spouštím kontejner…' })
+  setState(r, projectId, { state: 'starting', log: '', message: 'Spouštím kontejner…' })
 
   if (!existsSync(join(workspaceDir(projectId), '.aforge/start.sh'))) {
     setState(r, projectId, { state: 'error', message: 'Chybí .aforge/start.sh – nejdřív spusťte Build.' })
@@ -136,25 +165,36 @@ export const startPreview = async (projectId: string) => {
     setState(r, projectId, { state: 'error', message: `Chybí image ${RUNTIME_IMAGE} – spusťte „npm run runtime:build“.` })
     return
   }
-  await run('docker', ['network', 'create', networkName(projectId)])
+  await createJobNetwork(networkName(projectId))
+  // Other repositories (a backend beside the web app) start first, in the background, from /repos/<id>.
+  const extra = reposOf(await loadProject(projectId)).filter((x) => x.id !== 'main' && existsSync(join(repoDir(projectId, x.id), '.aforge/start.sh')))
   const started = await run('docker', [
     'run', '-d',
     '--name', containerName(projectId),
     '--network', networkName(projectId),
     '--label', 'aforge.project=' + projectId,
-    '--memory', '4g', '--cpus', '2',
-    '-p', '127.0.0.1::80',
+    '--memory', '4g', '--cpus', '2', '--pids-limit=512', '--security-opt=no-new-privileges', '--cap-drop=ALL', '--cap-add=CHOWN', '--cap-add=SETUID', '--cap-add=SETGID', '--cap-add=DAC_OVERRIDE', '--cap-add=NET_BIND_SERVICE',
+    '--label', 'aforge.managed=true', '--label', 'aforge.kind=preview', ...proxyArgs(),
+    '--read-only', '--tmpfs', '/app:rw,exec,nosuid,nodev,size=2g', '--tmpfs', '/srv:rw,exec,nosuid,nodev,size=512m',
+    '--tmpfs', '/tmp:rw,exec,nosuid,nodev,size=512m', '--tmpfs', '/run:rw,nosuid,nodev,size=16m',
+    '--tmpfs', '/etc/nginx:rw,nosuid,nodev,size=8m', '--tmpfs', '/var/lib/nginx:rw,nosuid,nodev,size=32m', '--tmpfs', '/var/log:rw,nosuid,nodev,size=32m',
+    '-e', 'HOME=/tmp/home', '-e', 'DOTNET_CLI_HOME=/tmp/dotnet',
     '-v', `${workspaceDir(projectId)}:/workspace:ro`,
+    ...extra.flatMap((x) => ['-v', `${repoDir(projectId, x.id)}:/repos/${x.id}:ro`]),
     RUNTIME_IMAGE,
-    'bash', '/workspace/.aforge/start.sh',
+    // A constant script: every /repos/<id>/.aforge/start.sh in the background with prefixed logs, then the main one.
+    'bash', '-c', 'cp -a /opt/nginx-template/. /etc/nginx/; mkdir -p /tmp/home /var/log/nginx; for d in /repos/*/; do [ -f "$d.aforge/start.sh" ] && (bash "$d.aforge/start.sh" 2>&1 | sed -u "s|^|[$(basename "$d")] |") & done; exec bash /workspace/.aforge/start.sh',
   ])
   if (started.code !== 0) {
-    setState(r, projectId, { state: 'error', message: started.stderr.trim() })
-    return
+    throw new Error(started.stderr.trim())
   }
+  const ingress = await run('docker', ['run', '-d', '--name', ingressName(projectId), '--network', 'bridge', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--memory=128m', '--cpus=0.25', '--pids-limit=64', '--label', 'aforge.managed=true', '--label', 'aforge.kind=ingress', '-e', `TARGET=${containerName(projectId)}`, '-p', '127.0.0.1::8080', process.env.AFORGE_INGRESS_IMAGE ?? 'reactor-ingress:latest'])
+  if (ingress.code !== 0) { await stopPreview(projectId); throw new Error('Nelze spustit vstupní proxy náhledu.') }
+  const linked = await run('docker', ['network', 'connect', networkName(projectId), ingressName(projectId)])
+  if (linked.code !== 0) { await stopPreview(projectId); throw new Error('Nelze připojit vstupní proxy k náhledu.') }
   const logs = streamLines('docker', ['logs', '-f', containerName(projectId)], {}, (line) => appendLog(r, projectId, line))
   r.stopLogs = logs.kill
-  const port = Number((await run('docker', ['port', containerName(projectId), '80/tcp'])).stdout.trim().split(':').pop())
+  const port = Number((await run('docker', ['port', ingressName(projectId), '8080/tcp'])).stdout.trim().split(':').pop())
   const alive = async () => (await run('docker', ['inspect', '-f', '{{.State.Running}}', containerName(projectId)])).stdout.trim() === 'true'
   let running = true
   const watcher = setInterval(async () => (running = await alive()), 3000)
@@ -162,10 +202,25 @@ export const startPreview = async (projectId: string) => {
   const ready = await waitForHttp(port, () => running, 15 * 60_000)
   clearInterval(watcher)
   if (!ready) {
+    await stopPreview(projectId)
     setState(r, projectId, { state: 'error', message: 'Aplikace nenaběhla – viz log kontejneru.' })
     return
   }
-  r.proxy = await startProxy(port)
-  const url = `http://localhost:${(r.proxy.address() as AddressInfo).port}`
+  r.proxy = await startProxy(port, projectId)
+  const url = previewDomain ? previewAddress(projectId) : `http://localhost:${(r.proxy.address() as AddressInfo).port}`
+  r.idle = setTimeout(() => void stopPreview(projectId), limits.previewMinutes * 60_000); r.idle.unref()
   setState(r, projectId, { state: 'running', url, message: 'Běží' })
 }
+
+/** Starts the preview when it is off, or waits while it is starting; jobs that need the running app call this. */
+export const ensurePreviewRunning = async (projectId: string, log: (text: string) => void) => {
+  if (previewStatus(projectId).state === 'running') return
+  log('Náhled neběží, spouštím aplikaci v kontejneru…')
+  if (previewStatus(projectId).state === 'starting') {
+    while (previewStatus(projectId).state === 'starting') await new Promise((r) => setTimeout(r, 1500))
+  } else await startPreview(projectId)
+  if (previewStatus(projectId).state !== 'running') throw new Error(`Náhled se nepodařilo spustit: ${previewStatus(projectId).message ?? 'viz log kontejneru v kroku Náhled'}.`)
+}
+
+export const previewPort = (id: string) => { touchPreview(id); return (previews.get(id)?.proxy?.address() as AddressInfo | undefined)?.port }
+export const stopAllPreviews = () => Promise.allSettled([...previews.keys()].map(stopPreview))

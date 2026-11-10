@@ -1,4 +1,4 @@
-// User stories: the project description plus "As a … I want … so that …" cards with acceptance
+// User stories: "As a … I want … so that …" cards with acceptance
 // criteria, priority, status and the screens they live on.
 import type { Story } from '@aforge/shared'
 import { Icon } from '../icons'
@@ -17,6 +17,8 @@ const STATUS: Record<Story['status'], { label: string; cls: string }> = {
   implemented: { label: 'Implementováno', cls: 'purple' },
   verified: { label: 'Ověřeno testy', cls: 'green' },
 }
+
+export { PRIORITY as STORY_PRIORITY, STATUS as STORY_STATUS }
 
 const nextId = (stories: Story[]) => `US-${Math.max(0, ...stories.map((s) => Number(s.id.replace(/\D/g, '')) || 0)) + 1}`
 
@@ -53,8 +55,8 @@ export const StoriesStage = () => {
         <button className="btn primary" onClick={add}>
           <Icon.plus /> Nová story
         </button>
-        <button className="btn" disabled={s.agentBusy} onClick={() => void s.askAgent({ intent: 'stories' })}>
-          <Icon.sparkles /> Navrhnout z popisu
+        <button className="btn" disabled={s.generating !== null} onClick={() => void s.generate('stories')} title="Agent vytvoří nebo doplní stories z promptu sekce a designu">
+          <Icon.sparkles /> {s.generating === 'stories' ? 'Generuji…' : 'Generovat stories'}
         </button>
         <button className="btn" disabled={s.agentBusy} onClick={() => void s.askAgent({ intent: 'check' })}>
           <Icon.warn /> Zkontrolovat konflikty
@@ -62,21 +64,11 @@ export const StoriesStage = () => {
       </div>
       <div className="split">
         <div className="pane-scroll" style={{ padding: 16, background: 'var(--window)' }}>
-          <div className="group-box">
-            <h3 style={{ margin: '0 0 6px', fontSize: 11, color: 'var(--label-2)' }}>Popis projektu</h3>
-            <textarea
-              className="field"
-              rows={4}
-              value={project.description}
-              placeholder="Volný popis: pro koho aplikace je, co řeší, hlavní procesy, integrace, omezení…"
-              onChange={(e) => s.update((p) => ({ ...p, description: e.target.value }))}
-            />
-          </div>
           {project.stories.length === 0 && (
             <div className="empty" style={{ height: 'auto', padding: 40 }}>
               <div>
                 Zatím žádné user stories.
-                <p>Napište popis projektu a nechte agenta navrhnout první stories, nebo je přidejte ručně.</p>
+                <p>Napište požadavky do panelu Prompt sekce a dejte Generovat stories, nebo je přidejte ručně.</p>
               </div>
             </div>
           )}

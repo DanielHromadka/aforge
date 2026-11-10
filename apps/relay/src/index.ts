@@ -1,4 +1,4 @@
-// aForge relay: passes frames between one hub (an aForge server, the host) and its worker daemons
+// Reactor relay: passes frames between one hub (an Reactor server, the host) and its worker daemons
 // (clients). Modelled on aFinder's relay (mobile/relay): one room per hub, the room name is the hash
 // of the hub's secret so only the hub can claim it, and the payloads are end-to-end encrypted, so the
 // relay only keeps rooms apart. Everyone connects outwards; no server needs an open port.
@@ -55,7 +55,7 @@ setInterval(() => {
 const server = http.createServer((req, res) => {
   if (req.url === '/' || req.url === '/health') {
     res.writeHead(200, { 'content-type': 'text/plain' })
-    res.end(`aForge relay\nrooms: ${rooms.size}\n`)
+    res.end(`Reactor relay\nrooms: ${rooms.size}\n`)
     return
   }
   res.writeHead(404).end()
@@ -69,7 +69,9 @@ server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url ?? '/', 'http://relay')
   const name = ROUTE.exec(url.pathname)?.[1]
   const role = url.searchParams.get('role')
-  const ip = String(req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? 'local').split(',')[0]!.trim()
+  const peer = req.socket.remoteAddress ?? 'local'
+  const trusted = process.env.RELAY_TRUST_PROXY === 'true' && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(peer)
+  const ip = String(trusted ? req.headers['x-forwarded-for'] ?? peer : peer).split(',')[0]!.trim()
   const refuse = (status: number, text: string) => {
     socket.end(`HTTP/1.1 ${status} ${text}\r\n\r\n`)
   }
@@ -153,4 +155,10 @@ const acceptHost = (ws: WebSocket, name: string) => {
   ws.on('error', () => ws.terminate())
 }
 
-server.listen(PORT, () => console.log(`aForge relay on :${PORT}`))
+server.listen(PORT, process.env.RELAY_HOST ?? '0.0.0.0', () => console.log(`Reactor relay on :${PORT}`))
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) process.once(signal, () => {
+  for (const client of wss.clients) client.close(1001, 'Server restarting')
+  server.close(() => process.exit(0))
+  setTimeout(() => process.exit(0), 3000).unref()
+})

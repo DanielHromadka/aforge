@@ -1,0 +1,7 @@
+[Unit]
+Description=Check Reactor readiness and backup freshness
+After=network-online.target
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/reactor/production.env
+ExecStart=/opt/reactor/current/deploy/production/monitor.sh

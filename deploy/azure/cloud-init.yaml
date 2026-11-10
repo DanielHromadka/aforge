@@ -1,0 +1,57 @@
+#cloud-config
+# Host prerequisites from deploy/production/INSTALL.md §1; the release itself comes later via deploy.sh.
+package_update: true
+package_upgrade: true
+packages: [git, curl, ca-certificates, gnupg, openssl, util-linux, uidmap, dbus-user-session, slirp4netns, bzip2, jq]
+
+# 8 GB sizes: Keycloak + Postgres + app + one agent fit, a Playwright run on top needs headroom.
+swap:
+  filename: /swapfile
+  size: 4G
+
+write_files:
+  # Ubuntu 24.04 blocks unprivileged user namespaces unless the binary has an AppArmor profile.
+  - path: /etc/apparmor.d/usr.bin.rootlesskit
+    content: |
+      abi <abi/4.0>,
+      include <tunables/global>
+
+      /usr/bin/rootlesskit flags=(unconfined) {
+        userns,
+
+        include if exists <local/usr.bin.rootlesskit>
+      }
+  # production:check requires rootless Docker to enforce CPU/memory/PID limits.
+  - path: /etc/systemd/system/user@.service.d/delegate.conf
+    content: |
+      [Service]
+      Delegate=cpu cpuset io memory pids
+
+runcmd:
+  - set -eux
+  - arch=$(dpkg --print-architecture); codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+  - install -d -m 755 /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=$arch signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $codename stable" > /etc/apt/sources.list.d/docker.list
+  - curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+  - echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /etc/apt/keyrings/caddy.gpg
+  - echo "deb [signed-by=/etc/apt/keyrings/caddy.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" > /etc/apt/sources.list.d/caddy.list
+  - curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /etc/apt/keyrings/cloudflare-main.gpg
+  - echo "deb [signed-by=/etc/apt/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" > /etc/apt/sources.list.d/cloudflared.list
+  - apt-get update
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras caddy cloudflared
+  # Only the rootless daemon may run; reactor-proxy.service starts its own Caddy on loopback.
+  - systemctl disable --now docker.service docker.socket caddy.service
+  - rm -f /var/run/docker.sock
+  - systemctl restart apparmor.service
+  - systemctl daemon-reload
+  # restic from upstream: managed-identity auth for Azure Blob is newer than Ubuntu's package.
+  - v=0.18.1; cd /tmp && curl -fsSLO "https://github.com/restic/restic/releases/download/v$v/restic_${v}_linux_$arch.bz2" && curl -fsSL "https://github.com/restic/restic/releases/download/v$v/SHA256SUMS" | grep " restic_${v}_linux_$arch.bz2$" | sha256sum -c - && bunzip2 -c "restic_${v}_linux_$arch.bz2" > /usr/local/bin/restic && chmod 755 /usr/local/bin/restic && ln -sf /usr/local/bin/restic /usr/bin/restic
+  - id reactor || useradd -m -u 1001 -s /bin/bash reactor
+  - loginctl enable-linger reactor
+  - for i in $(seq 60); do [ -S /run/user/1001/bus ] && break; sleep 1; done
+  - sudo -iu reactor env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus dockerd-rootless-setuptool.sh install
+  - install -d -m 700 -o root -g root /etc/reactor
+  - install -d -m 755 /opt/reactor/releases /srv/reactor
+  - touch /var/lib/reactor-host-ready

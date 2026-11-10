@@ -1,0 +1,15 @@
+[Unit]
+Description=Reactor Cloudflare Tunnel
+After=network-online.target reactor-proxy.service
+[Service]
+User=reactor
+Group=reactor
+EnvironmentFile=/etc/reactor/tunnel.env
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target

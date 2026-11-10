@@ -14,17 +14,20 @@ const serial = <T>(projectId: string, fn: () => Promise<T>): Promise<T> => {
   return next
 }
 
-export const askConsultant = async (projectId: string, text: string, focus: Focus): Promise<[ChatMessage, ChatMessage]> => {
+export const askConsultant = async (projectId: string, text: string, focus: Focus, step?: string): Promise<[ChatMessage, ChatMessage]> => {
   const project = await loadProject(projectId)
   const stage: Stage = focus.stage
-  const userMsg: ChatMessage = { id: randomUUID(), role: 'user', text, stage, proposals: [], conflicts: [], createdAt: new Date().toISOString() }
+  const anchor = typeof focus.anchor === 'string' && focus.anchor ? focus.anchor.slice(0, 40) : undefined
+  const userMsg: ChatMessage = { id: randomUUID(), role: 'user', text, stage, stepId: focus.stepId, ...(anchor ? { anchor } : {}), proposals: [], conflicts: [], createdAt: new Date().toISOString() }
   const context = await buildContext(project, focus, await loadChat(projectId))
-  const reply = await consult(CONSULTANT_SYSTEM, `${context}\n\n<user_request stage="${stage}">\n${text}\n</user_request>`)
+  const reply = await consult(CONSULTANT_SYSTEM, `${context}\n\n<user_request stage="${stage}">\n${text}\n</user_request>`, { projectId, projectName: project.name, step: step ?? (anchor ? `Konzultace · ${anchor}` : `Konzultace · ${stage}`), role: anchor ? 'analyst' : 'consultant' })
   const agentMsg: ChatMessage = {
     id: randomUUID(),
     role: 'agent',
     text: reply.reply,
     stage,
+    stepId: focus.stepId,
+    ...(anchor ? { anchor } : {}),
     proposals: reply.proposals.map((p) => ({ ...p, id: `${p.id}-${randomUUID().slice(0, 4)}`, status: 'pending' as const })),
     conflicts: reply.conflicts,
     createdAt: new Date().toISOString(),
@@ -42,7 +45,7 @@ export const decideProposal = (projectId: string, msgId: string, proposalId: str
     if (proposal.status !== 'pending') throw new Error('Návrh už byl vyřízen')
     let project = await loadProject(projectId)
     if (accept) {
-      project = await saveProject(applyOps(project, proposal.ops))
+      project = await saveProject(applyOps(project, proposal.ops), 'Přijatý návrh agenta')
       let files = 0
       for (const op of proposal.ops) {
         if (op.type === 'file.write') await writeText(projectId, op.path, op.content)
@@ -50,7 +53,7 @@ export const decideProposal = (projectId: string, msgId: string, proposalId: str
         else continue
         files++
       }
-      if (files) await commit(projectId, `aForge agent: ${proposal.title}`)
+      if (files) await commit(projectId, `Reactor agent: ${proposal.title}`)
     }
     proposal.status = accept ? 'accepted' : 'rejected'
     await saveChat(projectId, chat)

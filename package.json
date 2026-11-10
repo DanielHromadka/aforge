@@ -14,13 +14,22 @@
     "typecheck": "tsc --noEmit -p packages/shared && tsc --noEmit -p packages/protocol && tsc --noEmit -p packages/runner && tsc --noEmit -p apps/server && tsc --noEmit -p apps/relay && tsc --noEmit -p apps/worker && tsc --noEmit -p apps/web",
     "test": "vitest run",
     "runtime:build": "docker build -t aforge-runtime:latest runtime",
+    "keycloak": "docker run --rm --name aforge-keycloak -p 8380:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=kcadmin -e KC_BOOTSTRAP_ADMIN_PASSWORD=kcadmin -v \"$PWD/deploy/keycloak:/opt/keycloak/data/import:ro\" quay.io/keycloak/keycloak:26.5.2 start-dev --import-realm",
     "relay": "npm start -w @aforge/relay",
-    "worker": "npm start -w @aforge/worker"
+    "worker": "npm start -w @aforge/worker",
+    "production:config": "node scripts/production.mjs init",
+    "production:check": "node --import tsx scripts/production.mjs check",
+    "production:claim-legacy": "node scripts/production.mjs claim-legacy",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "concurrently": "^10.0.6",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "dompurify": "3.4.17",
+    "katex": "0.18.2"
   }
 }

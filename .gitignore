@@ -3,3 +3,19 @@ dist/
 data/
 *.tsbuildinfo
 .DS_Store
+
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.releases/
+
+*.env
+!*.env.example
+
+# Terraform (state holds resource ids; tfvars the subscription and admin IP)
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars

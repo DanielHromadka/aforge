@@ -1,36 +1,49 @@
 // What the agent sees: the whole project model, the workspace layout, open annotations, the last test
 // run and what the user is looking at. Built fresh for every request so it is never stale.
-import type { ChatMessage, Project, Stage } from '@aforge/shared'
+import { sectionPromptsOf, designOutline, nextKeys, reposOf, type ChatMessage, type Project, type PromptSection, type Stage } from '@aforge/shared'
 import { fileTree, flatPaths, readText } from './workspace.js'
+import { attachmentContext } from './attachments.js'
 
 export interface Focus {
+  stepId?: string
   stage: Stage
   screenId?: string
   elementId?: string
   storyId?: string
   filePath?: string
+  /** The thread belongs to this story or issue. */
+  anchor?: string
 }
 
-export const CONSULTANT_SYSTEM = `Jsi aForge Agent – seniorní solution architekt, analytik a vývojář v softwarovém domě,
-který staví webové aplikace (backend .NET / Node / Python, frontend React / Vue, hosting Azure Container Apps,
-AKS, App Service nebo Static Web Apps na Ubuntu kontejnerech).
+export const CONSULTANT_SYSTEM = `Jsi Reactor Agent – seniorní solution architekt, analytik a vývojář v softwarovém domě,
+který vyvíjí webové, mobilní i desktopové aplikace, backendy a knihovny.
 
-Pracuješ uvnitř platformy aForge. Projekt má fáze: design (wireframy), stories (user stories s akceptačními
-kritérii), blocks (model bloků a vazeb), build (implementace agentem), code, preview (běh v kontejneru,
-anotace uživatele) a tests (Playwright testy navázané na stories přes "[US-x]" v názvu).
+Pracuješ uvnitř platformy Reactor. Práce je řazená jako v Jiře: epic → story (s akceptačními kritérii) → task a bug
+(a sub-task). Klíče mají tvar <KLÍČ>-<číslo>, např. RZ-12, a sdílejí jedno číslování. Task má vrstvu (fe, be, api,
+test, other) a repozitář projektu; každý repozitář má platformu (web, mobile, desktop, backend, library) a svého
+agenta. Repozitáře spojuje API kontrakt (OpenAPI). Tok: design (z Figmy) → stories → rozpad na tasky
+(Architekt) → implementace (agent na repozitář) → náhled (anotace) → testy (navázané na stories přes "[KLÍČ-n]"
+v názvu; selhaný test založí bug) → wiki pro lidi (Dokumentarista).
 
 Pravidla:
 - Odpovídej česky, věcně a stručně (pole "reply", Markdown povolen).
 - Projekt NIKDY neměníš přímo. Každou změnu navrhni jako položku v "proposals" složenou z operací "ops";
   uživatel ji přijme, nebo odmítne. Jeden návrh = jedna logická změna, ať jde přijímat po částech.
-- Zachovávej existující id. Nové story mají id "US-<další číslo>", prvky wireframu "el-<krátký-slug>",
-  obrazovky "screen-<slug>", bloky "blk-<slug>", vazby "edge-<slug>", návrhy "p-<slug>".
-- U story.upsert / element.upsert / block.upsert posílej celý objekt (všechna pole), ne jen změny.
-- Souřadnice prvků jsou v pixelech v rámci obrazovky (obvykle 1280×800). Bloky rozmísti do mřížky (x, y po ~260/140 px).
+- Zachovávej existující id. Nové epicy a story dostanou další volný klíč projektu (viz nextKey v modelu),
+  nové tasky a bugy přes "issue.upsert" s id "new", diagramy "dg-<slug>", návrhy "p-<slug>".
+- Zadání projektu (description) a prompty sekcí (prompts) jsou pokyny uživatele – mají přednost před tvými
+  předpoklady. Stack se nevybírá ručně: vychází ze zadání, jinak z architektury (architecture.stack).
+- Design (obrazovky = rámce, prvky = vrstvy) vzniká jen ve Figmě a do Reactoru se synchronizuje. Obrazovky ani
+  prvky nezakládej, neměň ani nemaž – design úpravy doporuč slovně (udělají se ve Figmě). K existujícímu
+  prvku smíš přes "element.annotate" doplnit poznámku (chování, validace, data), vazbu na stories a příznak
+  "work" (true = na prvku se pracuje, má přednost v dalším buildu). V kontextu vidíš horní vrstvy rámců
+  a všechny anotované prvky; "work": true jsou prvky, na kterých uživatel právě chce pracovat.
+- U story.upsert / diagram.upsert posílej celý objekt (všechna pole), ne jen změny. Diagram je zdroj Mermaid
+  odpovídající jeho typu (flowchart / sequence / state / er / class) a ke každému kroku má logický popis.
 - "file.write" používej jen na malé cílené úpravy kódu a vždy s celým novým obsahem souboru.
   Větší změny implementace doporuč spustit přes fázi Build.
 - Při každé odpovědi zkontroluj konzistenci: stories mezi sebou (duplicity, rozpory, chybějící kritéria),
-  stories × wireframy (story bez obrazovky, prvek bez story), stories × bloky, otevřené anotace × stories,
+  stories × design (story bez obrazovky, rozpracovaný prvek bez story), stories × architektura, otevřené anotace × stories,
   neúspěšné testy × stories. Nalezené problémy vrať v "conflicts" (error = rozpor, warning = mezera,
   info = doporučení) s id dotčených objektů v "refs". Pokud je vše v pořádku, vrať prázdné pole.
 - Když uživatel jen něco chce vědět, "proposals" nech prázdné.`
@@ -43,10 +56,28 @@ export const buildContext = async (project: Project, focus: Focus, chat: ChatMes
   const model = {
     name: project.name,
     description: project.description,
-    stack: project.stack,
+    prompts: sectionPromptsOf(project),
+    workflow: project.workflow && { preset: project.workflow.preset, steps: project.workflow.steps },
+    activeWorkflowStep: project.workflow?.steps.find((s) => s.id === focus.stepId),
+    implementingAgent: project.stack.agent,
+    key: project.key,
+    nextKey: nextKeys(project)[0],
+    repos: reposOf(project),
+    epics: project.epics,
     stories: project.stories,
-    screens: project.screens,
-    blocks: project.blocks,
+    attachments: await attachmentContext(project),
+    tests: (project.walkthroughs ?? []).map(({ id, title, section, route, instructions, storyIds, status }) => ({ id, title, section, route, instructions, storyIds, status })),
+    issues: (project.issues ?? []).map(({ files, ...i }) => ({ ...i, files: files.map((f) => f.path) })),
+    contract: project.contract && { version: project.contract.version, status: project.contract.status, yaml: project.contract.yaml.slice(0, 20_000) },
+    wiki: (project.wiki ?? []).map((w) => ({ id: w.id, title: w.title, updatedAt: w.updatedAt })),
+    figma: project.figma,
+    screens: project.screens.map(({ elements, image: _image, ...screen }) => ({
+      ...screen,
+      layers: elements.length,
+      elements: designOutline({ ...screen, elements }).map(({ figmaId: _f, ...e }) => e),
+    })),
+    architecture: project.architecture,
+    buildPlan: project.buildPlan,
     annotations: project.annotations.filter((a) => a.status !== 'resolved'),
     lastTestRun: project.testReport && {
       ok: project.testReport.ok,
@@ -81,18 +112,38 @@ ${thread || '(zatím žádná)'}
 </conversation_so_far>`
 }
 
+export const SECTION_LABEL: Record<PromptSection, string> = {
+  prompt: 'Prompt',
+  design: 'Design',
+  stories: 'Stories',
+  split: 'Rozpad na tasky',
+  wiki: 'Wiki',
+  blocks: 'Build › Bloky',
+  plan: 'Build › Implementační prompt',
+  code: 'Kód',
+  preview: 'Náhled',
+  tests: 'Testy',
+}
+
+/** What the runtime can run; the agent chooses a stack inside it. */
+export const RUNTIME = `kontejner aforge-runtime (Ubuntu 24.04, Node 22, .NET 8 SDK, Python 3, Nginx): jeden kontejner,
+frontend jako statický build za Nginx, backend na portu 5000 za /api/, databáze jen vestavěná (SQLite, soubor nebo
+v paměti) – externí služby (Postgres, Redis…) v běhu nejsou`
+
 /** Canned requests behind the toolbar buttons; they go through the same consultant contract. */
 export const INTENTS: Record<string, string> = {
   check:
-    'Proveď důkladnou kontrolu konzistence celého projektu (stories, wireframy, bloky, anotace, testy). Vrať všechny konflikty. Pro opravitelné problémy připrav návrhy.',
+    'Proveď důkladnou kontrolu konzistence celého projektu (zadání, stories, design, architektura, anotace, testy). Vrať všechny konflikty. Pro opravitelné problémy připrav návrhy.',
   stories:
-    'Z popisu projektu, wireframů a anotací navrhni chybějící user stories s akceptačními kritérii ve formátu Given/When/Then. Každá story jako samostatný návrh.',
+    'Z popisu projektu, designu z Figmy a anotací navrhni chybějící user stories s akceptačními kritérii ve formátu Given/When/Then. Každá story jako samostatný návrh.',
   blocks:
-    'Převeď stories a wireframy na model bloků: stránky (page), komponenty (component), API endpointy (api), entity (entity), workflow kroky (workflow), integrace (integration) a joby (job) včetně vazeb (edges). Každý blok propoj se stories přes storyIds. Vrať jeden návrh s bloky a druhý s vazbami. Existující bloky aktualizuj, nezakládej duplicitně.',
-  wireframes:
-    'Navrhni wireframy pro stories, které zatím nemají obrazovku. Každá nová obrazovka jako samostatný návrh (screen.upsert s prvky).',
+    'Navrhni nebo aktualizuj architekturu jako diagramy Mermaid (diagram.upsert): celek FE/BE/DB jako flowchart, hlavní průběhy jako sequence, stavová workflow jako state, data jako er. Ke každému kroku logický popis a vazba na stories.',
+  design:
+    'Projdi design synchronizovaný z Figmy. K obrazovkám přiřaď stories (screenIds v story.upsert), ke klíčovým prvkům doplň poznámky a vazby na stories (element.annotate). Upozorni na stories bez obrazovky, obrazovky bez stories a na to, co v designu chybí – to se doplní ve Figmě.',
   annotations:
     'Zpracuj otevřené anotace z náhledu: ke každé posuď, zda odpovídá stories, navrhni úpravu stories a/nebo cílenou úpravu kódu a anotaci označ jako vyřešenou (annotation.resolve) v tomtéž návrhu.',
   tests:
     'Rozeber výsledky posledního běhu testů. U neúspěšných testů urči, zda je chyba v implementaci, v testu, nebo v zadání, a navrhni opravy.',
+  story:
+    'Projdi vybranou story: jsou kritéria úplná a testovatelná, sedí na design, chybí rozpad nebo jsou otevřené bugy? Navrhni úpravy.',
 }

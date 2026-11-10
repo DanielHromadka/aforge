@@ -7,12 +7,14 @@ export const api = async <T,>(path: string, init?: { method?: string; body?: unk
     body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
   })
   const data = await res.json().catch(() => ({}))
+  // An expired session sends the app back to the sign-in page.
+  if (res.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event('aforge:signed-out'))
   if (!res.ok) throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`)
   return data as T
 }
 
 export interface HubEvent {
-  channel: 'build' | 'preview' | 'tests' | 'project' | 'pipeline' | 'hub'
+  channel: 'build' | 'preview' | 'tests' | 'project' | 'pipeline' | 'hub' | 'walkthrough' | 'generate' | 'session'
   kind: string
   text: string
   at: string
@@ -32,3 +34,6 @@ export const useProjectEvents = (projectId: string | undefined, onEvent: (e: Hub
 }
 
 export const uid = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 8)}`
+
+/** A fresh, per-user preview ticket on every open/reload; never store it in the project or SSE. */
+export const previewHref = (projectId: string, url: string) => url.startsWith('https:') ? `/api/projects/${encodeURIComponent(projectId)}/preview/open` : url

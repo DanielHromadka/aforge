@@ -1,0 +1,776 @@
+<title>Reactor UI návrh</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one reading column for the argument, wide framed mockups of the real app in Reactor's own clean Finder look. */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  --display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --window: #f7f8fa; --content: #ffffff; --label: rgba(0,0,0,.86); --label-2: rgba(0,0,0,.52); --label-3: rgba(0,0,0,.28);
+  --separator: rgba(0,0,0,.07); --control: rgba(0,0,0,.05); --control-2: rgba(0,0,0,.09);
+  --accent: #007aff; --accent-soft: rgba(0,122,255,.12);
+  --ring: 0 0 0 1px rgba(0,0,0,.05), 0 1px 3px rgba(0,0,0,.05);
+  --lift: 0 0 0 1px rgba(0,0,0,.05), 0 12px 40px rgba(20,30,60,.10);
+  /* one hue per stage of work, the same everywhere */
+  --c-design: #af52de; --c-story: #007aff; --c-split: #30b0c7; --c-fe: #5e5ce6; --c-be: #ff9500; --c-preview: #28cd41; --c-test: #ff2d55; --c-wiki: #a2845e;
+  --t-epic: #904ee2; --t-story: #63ba3c; --t-task: #4bade8; --t-bug: #e5493a; --t-sub: #4bade8;
+  --ok: #28a745; --warn: #f29900; --err: #ff3b30; --run: #007aff;
+  --term: #1e1e20; --term-fg: #e8e8ea;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --window: #161618; --content: #1f1f22; --label: rgba(255,255,255,.88); --label-2: rgba(255,255,255,.56); --label-3: rgba(255,255,255,.28);
+  --separator: rgba(255,255,255,.07); --control: rgba(255,255,255,.07); --control-2: rgba(255,255,255,.12);
+  --accent: #0a84ff; --accent-soft: rgba(10,132,255,.22);
+  --ring: 0 0 0 1px rgba(255,255,255,.06), 0 1px 3px rgba(0,0,0,.4); --lift: 0 0 0 1px rgba(255,255,255,.07), 0 12px 40px rgba(0,0,0,.5);
+  --c-design: #bf5af2; --c-story: #0a84ff; --c-split: #40c8e0; --c-fe: #7d7aff; --c-be: #ff9f0a; --c-preview: #32d74b; --c-test: #ff375f; --c-wiki: #b59469;
+  --t-epic: #a46ef0; --t-story: #74c94b; --t-task: #5cb9ee; --t-bug: #f0614f; --t-sub: #5cb9ee;
+  --ok: #32d74b; --warn: #ffb340; --err: #ff453a; --run: #0a84ff; --term: #111113;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --window: #161618; --content: #1f1f22; --label: rgba(255,255,255,.88); --label-2: rgba(255,255,255,.56); --label-3: rgba(255,255,255,.28);
+  --separator: rgba(255,255,255,.07); --control: rgba(255,255,255,.07); --control-2: rgba(255,255,255,.12);
+  --accent: #0a84ff; --accent-soft: rgba(10,132,255,.22);
+  --ring: 0 0 0 1px rgba(255,255,255,.06), 0 1px 3px rgba(0,0,0,.4); --lift: 0 0 0 1px rgba(255,255,255,.07), 0 12px 40px rgba(0,0,0,.5);
+  --c-design: #bf5af2; --c-story: #0a84ff; --c-split: #40c8e0; --c-fe: #7d7aff; --c-be: #ff9f0a; --c-preview: #32d74b; --c-test: #ff375f; --c-wiki: #b59469;
+  --t-epic: #a46ef0; --t-story: #74c94b; --t-task: #5cb9ee; --t-bug: #f0614f; --t-sub: #5cb9ee;
+  --ok: #32d74b; --warn: #ffb340; --err: #ff453a; --run: #0a84ff; --term: #111113;
+  color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--window); color: var(--label); font: 15px/1.55 var(--font); -webkit-font-smoothing: antialiased; letter-spacing: -.1px }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 56px 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 72px }
+.prose { max-width: 680px; display: flex; flex-direction: column; gap: 14px }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.05; letter-spacing: -1.2px; font-weight: 700 }
+h2 { font-size: 26px; letter-spacing: -.5px; font-weight: 700 }
+h3 { font-size: 16px; font-weight: 600; letter-spacing: -.2px }
+p { margin: 0 }
+.lead { font-size: 18px; color: var(--label-2); line-height: 1.5 }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--label-2) }
+.muted { color: var(--label-2) }
+section { display: flex; flex-direction: column; gap: 22px }
+svg.i { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round }
+
+/* verdict */
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px }
+.verdict > div { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.verdict b { font-size: 15px }
+.verdict p { font-size: 14px; color: var(--label-2) }
+
+/* the flow of work */
+.flow { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0; background: var(--content); border-radius: 16px; box-shadow: var(--ring); padding: 22px 14px }
+.stage { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; position: relative; padding: 0 6px }
+.stage + .stage::before { content: ""; position: absolute; top: 21px; right: calc(50% + 26px); width: calc(100% - 52px); height: 2px; border-radius: 1px; background: var(--separator) }
+.tile { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: var(--tone) }
+.tile svg.i { width: 22px; height: 22px; stroke-width: 1.6 }
+.stage b { font-size: 13.5px }
+.stage span { font-size: 12px; color: var(--label-2); line-height: 1.35 }
+.stage .who { font-size: 11.5px; color: var(--tone); font-weight: 600 }
+@media (max-width: 860px) { .flow { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 22px } .stage + .stage::before { display: none } }
+@media (max-width: 480px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+
+/* agents team */
+.team { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px }
+.agent { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px; display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 4px 12px; align-items: start }
+.agent .tile { width: 40px; height: 40px; grid-row: span 2 }
+.agent .tile svg.i { width: 20px; height: 20px }
+.agent p { font-size: 13px; color: var(--label-2); line-height: 1.4 }
+
+/* status glyphs */
+.states { display: flex; flex-wrap: wrap; gap: 10px 22px; background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px 20px }
+.state { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px }
+.st { width: 16px; height: 16px; flex: 0 0 auto; display: inline-block; color: var(--label-3) }
+.st svg { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round }
+.st.run { color: var(--run) } .st.ok { color: var(--ok) } .st.wait { color: var(--warn) } .st.err { color: var(--err) } .st.block { color: var(--label-2) }
+.st.run svg { animation: spin 1.6s linear infinite }
+@keyframes spin { to { transform: rotate(360deg) } }
+@media (prefers-reduced-motion: reduce) { .st.run svg, .pulse { animation: none !important } }
+
+/* mockups */
+.tabs { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--control); align-self: flex-start; flex-wrap: wrap }
+.tabs button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--label); padding: 6px 12px; border-radius: 8px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center }
+.tabs button[aria-selected="true"] { background: var(--content); box-shadow: var(--ring); font-weight: 600 }
+.tabs button:focus-visible, .tabs button:hover { outline: none; background: var(--content) }
+.caption { max-width: 680px; color: var(--label-2); font-size: 14px }
+.scroller { overflow-x: auto; border-radius: 18px; -webkit-overflow-scrolling: touch }
+.app { min-width: 1040px; background: var(--window); border-radius: 18px; box-shadow: var(--lift); padding: 8px; display: grid; grid-template-rows: 48px minmax(0,1fr); gap: 8px; font-size: 13px; letter-spacing: -.08px; line-height: 1.35 }
+.card { background: var(--content); border-radius: 12px; box-shadow: var(--ring); min-width: 0 }
+.top { display: flex; align-items: center; gap: 10px; padding: 0 10px }
+.top .name { display: flex; flex-direction: column; line-height: 1.2; margin-right: 6px } .top .name small { color: var(--label-2); font-size: 11px }
+.iconbtn { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--label-2) }
+.ladder { display: flex; align-items: center; margin: 0 auto }
+.rung { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 15px; color: var(--label-2) }
+.rung .dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--control-2); color: var(--label) }
+.rung .dot svg.i { width: 13px; height: 13px; stroke-width: 1.8 }
+.rung.done .dot { background: var(--tone); color: #fff }
+.rung.now { background: var(--accent-soft); color: var(--accent); font-weight: 600 }
+.rung.now .dot { background: var(--tone); color: #fff }
+.link { width: 14px; height: 2px; background: var(--separator); border-radius: 1px }
+.link.done { background: var(--label-3) }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 8px; background: var(--control); font-weight: 500; white-space: nowrap }
+.btn.primary { background: var(--accent); color: #fff }
+.body { display: grid; gap: 8px; min-height: 0 }
+.pane { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+.pane h4 { margin: 0; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px }
+.pane h4 .muted { font-weight: 400 }
+.side { padding: 10px 8px; display: flex; flex-direction: column; gap: 2px }
+.nav { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 7px; color: var(--label) }
+.nav svg.i { color: var(--tone, var(--accent)) }
+.nav.cur { background: var(--accent-soft); color: var(--accent); font-weight: 600 }
+.nav .n { margin-left: auto; color: var(--label-2); font-size: 12px; font-variant-numeric: tabular-nums }
+.navhead { font-size: 11px; font-weight: 600; color: var(--label-2); padding: 12px 8px 4px }
+.mini { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: #fff; background: var(--tone); flex: 0 0 auto }
+.mini svg.i { width: 13px; height: 13px; stroke-width: 1.8 }
+.row { display: flex; align-items: center; gap: 10px; min-width: 0 }
+.grow { flex: 1; min-width: 0 }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.small { font-size: 11.5px; color: var(--label-2) }
+.num { font-variant-numeric: tabular-nums }
+
+/* cockpit */
+.pipe { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 8px }
+.pipe > div { border-radius: 10px; background: var(--window); padding: 12px; display: flex; flex-direction: column; gap: 8px }
+.pipe .big { font-size: 22px; font-weight: 700; letter-spacing: -.5px; font-variant-numeric: tabular-nums }
+.bar { height: 4px; border-radius: 2px; background: var(--control-2); overflow: hidden } .bar i { display: block; height: 100%; background: var(--tone); border-radius: 2px }
+.attn { display: flex; flex-direction: column; gap: 2px }
+.attn .row { padding: 8px; border-radius: 8px }
+.attn .row:hover { background: var(--window) }
+.crew { display: flex; flex-direction: column; gap: 10px }
+.pulse { animation: pulse 1.4s ease-in-out infinite } @keyframes pulse { 50% { opacity: .35 } }
+
+/* board */
+.cols { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; padding: 14px }
+.col { display: flex; flex-direction: column; gap: 8px; min-width: 0 }
+.colhead { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 2px 4px }
+.colhead .n { color: var(--label-2); font-weight: 400 }
+.story { background: var(--content); border-radius: 10px; box-shadow: var(--ring); padding: 10px; display: flex; flex-direction: column; gap: 8px }
+.story.sel { box-shadow: 0 0 0 2px var(--accent) }
+.thumb { height: 54px; border-radius: 6px; background: var(--window); position: relative; overflow: hidden }
+.thumb i { position: absolute; border-radius: 3px; background: var(--control-2) }
+.trail { display: flex; align-items: center; gap: 4px }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px 0 4px; border-radius: 6px; background: var(--window); font-size: 11px; color: var(--label-2) }
+.chip .tone { width: 14px; height: 14px; border-radius: 4px; display: grid; place-items: center; color: #fff; background: var(--tone) }
+.chip .tone svg.i { width: 9px; height: 9px; stroke-width: 2.2 }
+.chip .st, .chip .st svg { width: 12px; height: 12px }
+.who-av { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--tone); margin-left: auto }
+.who-av svg.i { width: 11px; height: 11px; stroke-width: 2 }
+
+/* story detail */
+.crit { display: flex; flex-direction: column; gap: 2px }
+.crit .row { align-items: flex-start; padding: 7px 8px; border-radius: 8px; background: var(--window) }
+.crit .row + .row { margin-top: 4px }
+.crit p { font-size: 12.5px; line-height: 1.4 }
+.task { display: grid; grid-template-columns: 22px minmax(0,1fr) auto; gap: 4px 10px; align-items: center; padding: 10px; border-radius: 10px; background: var(--window) }
+.task .files { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px }
+.file { font: 11px var(--mono); color: var(--label-2); background: var(--content); border-radius: 5px; padding: 2px 6px }
+.frame { border-radius: 10px; background: var(--window); padding: 12px; display: flex; flex-direction: column; gap: 8px; position: relative; height: 200px }
+.frame i { display: block; border-radius: 4px; background: var(--control-2) }
+.frame .mark { position: absolute; border: 1.5px solid var(--c-design); border-radius: 6px; background: transparent }
+.frame .tag { position: absolute; font-size: 10.5px; font-weight: 600; color: #fff; background: var(--c-design); border-radius: 4px; padding: 1px 5px }
+
+/* agent at work */
+.timeline { display: flex; flex-direction: column; gap: 0; padding-left: 4px }
+.ev { display: grid; grid-template-columns: 24px minmax(0,1fr) auto; gap: 10px; align-items: start; position: relative; padding-bottom: 14px }
+.ev::before { content: ""; position: absolute; left: 11px; top: 24px; bottom: 0; width: 2px; background: var(--separator) }
+.ev:last-child::before { display: none }
+.ev .k { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--window); color: var(--label-2) }
+.ev .k svg.i { width: 13px; height: 13px }
+.ev b { font-weight: 600 } .ev .small { margin-top: 2px }
+.term { background: var(--term); color: var(--term-fg); font: 11.5px/1.6 var(--mono); border-radius: 10px; padding: 10px 12px; white-space: pre; overflow: hidden }
+.term .g { color: #6fdc8c } .term .r { color: #ff8a80 } .term .d { color: #9a9aa2 }
+.proposal { border-radius: 12px; background: var(--window); padding: 14px; display: flex; flex-direction: column; gap: 10px }
+.diffrow { display: flex; align-items: center; gap: 8px; font: 12px var(--mono) }
+.diffrow .plus { color: var(--ok) } .diffrow .minus { color: var(--err) }
+.thread { display: flex; flex-direction: column; gap: 8px }
+.bubble { border-radius: 12px; padding: 8px 11px; max-width: 88%; font-size: 12.5px; line-height: 1.4 }
+.bubble.me { align-self: flex-end; background: var(--accent); color: #fff }
+.bubble.ai { background: var(--window) }
+.composer { display: flex; align-items: center; gap: 8px; height: 36px; border-radius: 10px; background: var(--window); padding: 0 6px 0 12px; color: var(--label-3) }
+.send { margin-left: auto; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; color: #fff }
+.send svg.i { width: 12px; height: 12px; stroke-width: 2 }
+
+/* issue types, as in Jira */
+.type { width: 16px; height: 16px; border-radius: 4px; display: inline-grid; place-items: center; color: #fff; background: var(--ty); flex: 0 0 auto }
+.type svg.i { width: 12px; height: 12px; stroke-width: 2.1 }
+.type.ty-epic { --ty: var(--t-epic) } .type.ty-story { --ty: var(--t-story) } .type.ty-task { --ty: var(--t-task) } .type.ty-bug { --ty: var(--t-bug) } .type.ty-sub { --ty: var(--t-sub) }
+.key { font: 600 11.5px var(--mono); color: var(--label-2); letter-spacing: 0 }
+.tree { background: var(--content); border-radius: 16px; box-shadow: var(--ring); padding: 18px 20px; display: flex; flex-direction: column; gap: 2px; overflow-x: auto }
+.node { display: grid; grid-template-columns: 16px auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; min-width: 520px }
+.node:hover { background: var(--window) }
+.node .src { font-size: 12px; color: var(--label-2); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap }
+.node .src .mini { width: 18px; height: 18px; border-radius: 5px } .node .src .mini svg.i { width: 11px; height: 11px }
+.l1 { margin-left: 26px } .l2 { margin-left: 52px }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px }
+.rules > div { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--label-2) }
+.rules b { color: var(--label) }
+.lane { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0; font-weight: 600 }
+.lane .small { font-weight: 400 }
+.lane .bar { width: 120px; margin-left: 6px; --tone: var(--t-epic) }
+.crumb { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--label-2) }
+
+/* wiki */
+.wikitree { display: flex; flex-direction: column; gap: 2px; padding: 12px 8px }
+.wikitree .nav { height: 28px }
+.wikitree .nav.l1 { margin-left: 18px }
+.doc { padding: 26px 34px; display: flex; flex-direction: column; gap: 14px; max-width: 720px; font-size: 14px; line-height: 1.55 }
+.doc h5 { margin: 0; font: 700 24px/1.15 var(--display); letter-spacing: -.5px }
+.doc h6 { margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--label-2) }
+.doc ul, .doc ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 3px }
+.doc .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--label-2) }
+.doc .meta span { display: inline-flex; align-items: center; gap: 5px }
+.changes { border-radius: 10px; background: var(--window); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px }
+
+/* repositories */
+.repos { display: grid; grid-template-columns: minmax(0,1fr) 220px minmax(0,1fr); gap: 12px; align-items: stretch }
+.repo { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0 }
+.repo .row b { font-size: 14px }
+.repo .file { align-self: flex-start }
+.contract { border-radius: 14px; border: 1.5px dashed var(--c-split); padding: 16px; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; text-align: center; font-size: 13px; color: var(--label-2) }
+.contract b { color: var(--label) }
+@media (max-width: 760px) { .repos { grid-template-columns: minmax(0,1fr) } }
+.repostack { display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+.platforms { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px }
+.platform { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0 }
+.platform .tile { width: 36px; height: 36px; border-radius: 10px } .platform .tile svg.i { width: 18px; height: 18px }
+.platform dl { margin: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 10px; font-size: 12.5px }
+.platform dt { color: var(--label-2) } .platform dd { margin: 0 }
+.decided { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px }
+.decided > div { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px }
+.decided .row { gap: 8px }
+.decided p { font-size: 13.5px; color: var(--label-2) }
+
+/* compare + plan */
+.tablewrap { overflow-x: auto; background: var(--content); border-radius: 14px; box-shadow: var(--ring) }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 14px }
+th, td { text-align: left; padding: 12px 16px; vertical-align: top }
+th { font-size: 12px; color: var(--label-2); font-weight: 600 }
+tbody tr + tr td { border-top: 1px solid var(--separator) }
+td:first-child { font-weight: 600; width: 22% }
+td:nth-child(2) { color: var(--label-2) }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; counter-reset: s }
+.steps > div { background: var(--content); border-radius: 14px; box-shadow: var(--ring); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; counter-increment: s }
+.steps > div::before { content: counter(s); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--accent-soft); color: var(--accent) }
+.steps p { font-size: 13.5px; color: var(--label-2) }
+code { font: 13px var(--mono); background: var(--control); padding: 1px 5px; border-radius: 4px }
+.qs { display: flex; flex-direction: column; gap: 10px; max-width: 760px; margin: 0; padding-left: 20px }
+.qs li { padding-left: 4px }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-design" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M2 5.5h12M5 8.5h3M5 11h6"/></symbol>
+  <symbol id="i-story" viewBox="0 0 16 16"><path d="M4 2.5h6l2.5 2.5v8.5H4z"/><path d="M6 7h4.5M6 9.5h4.5M6 12h2.5"/></symbol>
+  <symbol id="i-split" viewBox="0 0 16 16"><path d="M8 2v4M8 6 4 10v3.5M8 6l4 4v3.5"/><circle cx="8" cy="2.5" r=".6"/></symbol>
+  <symbol id="i-fe" viewBox="0 0 16 16"><rect x="1.8" y="3" width="12.4" height="9" rx="1.6"/><path d="M5.5 14h5M6 6.3 4.5 7.5 6 8.7M10 6.3l1.5 1.2L10 8.7"/></symbol>
+  <symbol id="i-be" viewBox="0 0 16 16"><ellipse cx="8" cy="3.8" rx="5" ry="1.8"/><path d="M3 3.8v8.4c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V3.8M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8"/></symbol>
+  <symbol id="i-preview" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></symbol>
+  <symbol id="i-test" viewBox="0 0 16 16"><path d="M6 2h4M6.8 2v4.2L3 12.6A1 1 0 0 0 3.9 14h8.2a1 1 0 0 0 .9-1.4L9.2 6.2V2"/><path d="M4.6 10h6.8"/></symbol>
+  <symbol id="i-done" viewBox="0 0 16 16"><path d="M8 1.8 13.5 4v4c0 3.2-2.4 5.4-5.5 6.2C4.9 13.4 2.5 11.2 2.5 8V4z"/><path d="m5.6 8 1.7 1.7 3.2-3.4"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 16 16"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 16 16"><path d="M7 2.5 8.2 6 11.5 7.2 8.2 8.4 7 12 5.8 8.4 2.5 7.2 5.8 6z"/><path d="M12 10.5v3M10.5 12h3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.5v9l7-4.5z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3.5 8.5 3 3 6-7"/></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 2h5.5L12 4.5V14H4z"/><path d="M9.5 2v2.5H12"/></symbol>
+  <symbol id="i-term" viewBox="0 0 16 16"><rect x="1.8" y="2.5" width="12.4" height="11" rx="1.8"/><path d="m4.5 6.5 2 1.5-2 1.5M8 10h3.5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3.3 3.3"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1.2"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1.2"/><rect x="9" y="9" width="4.5" height="4.5" rx="1.2"/></symbol>
+  <symbol id="i-board" viewBox="0 0 16 16"><rect x="2" y="2.5" width="3.4" height="11" rx="1"/><rect x="6.3" y="2.5" width="3.4" height="7" rx="1"/><rect x="10.6" y="2.5" width="3.4" height="9" rx="1"/></symbol>
+  <symbol id="i-code" viewBox="0 0 16 16"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></symbol>
+  <symbol id="i-api" viewBox="0 0 16 16"><path d="M5 4.5c-1.5 0-1.5 1-1.5 2S3 8 2 8c1 0 1.5.5 1.5 1.5s0 2 1.5 2M11 4.5c1.5 0 1.5 1 1.5 2S13 8 14 8c-1 0-1.5.5-1.5 1.5s0 2-1.5 2"/><path d="M6.5 8h3"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 16 16"><rect x="4.5" y="1.5" width="7" height="13" rx="1.8"/><path d="M7 12.5h2"/></symbol>
+  <symbol id="i-desktop" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11v3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 1.7 2.6 3.7 2.6 6S9.8 12.3 8 14C6.2 12.3 5.4 10.3 5.4 8S6.2 3.7 8 2z"/></symbol>
+  <symbol id="i-box" viewBox="0 0 16 16"><path d="M8 1.8 13.5 4.6v6.8L8 14.2l-5.5-2.8V4.6z"/><path d="M2.5 4.6 8 7.4l5.5-2.8M8 7.4v6.8"/></symbol>
+  <symbol id="i-wiki" viewBox="0 0 16 16"><path d="M2.5 3.2c2-.8 3.8-.6 5.5.6v9.7c-1.7-1.2-3.5-1.4-5.5-.6z"/><path d="M13.5 3.2c-2-.8-3.8-.6-5.5.6v9.7c1.7-1.2 3.5-1.4 5.5-.6z"/></symbol>
+  <symbol id="i-repo" viewBox="0 0 16 16"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="6" r="1.5"/><path d="M4.5 5v6M11.5 7.5c0 2.5-3 2.5-7 3.5"/></symbol>
+  <symbol id="t-epic" viewBox="0 0 16 16"><path d="M9.2 1.8 4.2 9h3.6l-1 5.2 5-7.2H8.2z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="t-story" viewBox="0 0 16 16"><path d="M4.5 2.5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v12L8 11.8l-3.5 2.7z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="t-task" viewBox="0 0 16 16"><path d="m3.6 8.4 2.9 2.9 6-6.6" stroke-width="2.4"/></symbol>
+  <symbol id="t-bug" viewBox="0 0 16 16"><path d="M6.2 3.2 5 2M9.8 3.2 11 2M3 7.2h2M11 7.2h2M3 10.4h2M11 10.4h2M3.6 13.4 5.3 12M12.4 13.4 10.7 12" stroke-width="1.6"/><path d="M8 2.8c1.3 0 2.2.8 2.3 1.9H5.7C5.8 3.6 6.7 2.8 8 2.8z" fill="currentColor" stroke="none"/><path d="M8 5.4c1.9 0 3.2 1.7 3.2 4.1S9.9 14 8 14s-3.2-2.1-3.2-4.5S6.1 5.4 8 5.4z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="t-sub" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="none" stroke-width="2"/></symbol>
+  <symbol id="s-todo" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/></symbol>
+  <symbol id="s-run" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" opacity=".25"/><path d="M8 2a6 6 0 0 1 6 6"/></symbol>
+  <symbol id="s-wait" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.3M8 10.8v.2"/></symbol>
+  <symbol id="s-ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="m5.3 8.2 1.8 1.8 3.6-3.8"/></symbol>
+  <symbol id="s-err" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="m6 6 4 4M10 6l-4 4"/></symbol>
+  <symbol id="s-block" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/></symbol>
+</svg>
+
+<main class="wrap">
+
+  <header class="prose">
+    <span class="eyebrow">Návrh UI · Reactor</span>
+    <h1>Story jako páteř, agenti jako tým</h1>
+    <p class="lead">Ve firmě nejde práce po fázích, ale po story, stejně jako v Jiře: epic, story, task a bug. Story má design, rozpadne se na tasky pro klienta (web, mobil nebo desktop) a backend, implementuje se, ukáže v náhledu a ověří testy. Nakonec agent aktualizuje wiki pro lidi. Navrhuji postavit editor kolem tohoto toku. Každý krok má svou ikonu a barvu a každý agent svou roli, takže je na první pohled vidět, na co se díváte a co se právě děje.</p>
+  </header>
+
+  <section>
+    <h2>Předělat celé UI?</h2>
+    <div class="verdict">
+      <div><b>Editor ano</b><p>Dnes ukazuje šest panelů najednou, fáze jsou dvakrát (žebřík i levé menu) a agent je jeden obecný chat. Nová informační architektura, dokovací panely zmizí.</p></div>
+      <div><b>Základ ne</b><p>Přihlášení, domovská stránka, čistý vzhled, sessions a backend zůstávají. Model už propojuje story s obrazovkami, anotacemi i testy.</p></div>
+      <div><b>Co chybí v datech</b><p>Hierarchie jako v Jiře, ale bez napojení na ni: epic, story, task, bug a sub-task s klíčem <code>RZ-12</code>. Task nese vrstvu FE / BE / API, repozitář, stav, agenta a změněné soubory. A stránky wiki.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Tok práce</h2>
+      <p class="muted">Osm kroků, každý s jednou barvou a ikonou. Stejnou barvu má krok v žebříku, na kartě story, v úkolu i u agenta, který na něm pracuje.</p>
+    </div>
+    <div class="flow">
+      <div class="stage" style="--tone:var(--c-design)"><span class="tile"><svg class="i"><use href="#i-design"/></svg></span><b>Design</b><span>Figma pro všechny platformy</span><span class="who">Designér</span></div>
+      <div class="stage" style="--tone:var(--c-story)"><span class="tile"><svg class="i"><use href="#i-story"/></svg></span><b>Story</b><span>Kdo, co, proč a kritéria</span><span class="who">Analytik</span></div>
+      <div class="stage" style="--tone:var(--c-split)"><span class="tile"><svg class="i"><use href="#i-split"/></svg></span><b>Rozpad</b><span>Úkoly FE, BE a API kontrakt</span><span class="who">Architekt</span></div>
+      <div class="stage" style="--tone:var(--c-fe)"><span class="tile"><svg class="i"><use href="#i-fe"/></svg></span><b>Frontend</b><span>Web, mobil nebo desktop</span><span class="who">FE vývojář</span></div>
+      <div class="stage" style="--tone:var(--c-be)"><span class="tile"><svg class="i"><use href="#i-be"/></svg></span><b>Backend</b><span>API, data a pravidla</span><span class="who">BE vývojář</span></div>
+      <div class="stage" style="--tone:var(--c-preview)"><span class="tile"><svg class="i"><use href="#i-preview"/></svg></span><b>Náhled</b><span>Prohlížeč, simulátor nebo okno aplikace</span><span class="who">Vy</span></div>
+      <div class="stage" style="--tone:var(--c-test)"><span class="tile"><svg class="i"><use href="#i-test"/></svg></span><b>Testy</b><span>Test ke každému kritériu</span><span class="who">Tester</span></div>
+      <div class="stage" style="--tone:var(--c-wiki)"><span class="tile"><svg class="i"><use href="#i-wiki"/></svg></span><b>Wiki</b><span>Jak a co aplikace umí</span><span class="who">Dokumentarista</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Epic, story, task, bug</h2>
+      <p class="muted">Stejné řazení jako v Jiře, se stejnými ikonami a klíči. Typ říká ikona vlevo, krok a vrstvu barevná dlaždice vpravo. Každá položka ví, odkud přišla.</p>
+    </div>
+    <div class="tree">
+      <div class="node"><span class="type ty-epic"><svg class="i"><use href="#t-epic"/></svg></span><span class="key">RZ-1</span><b class="ell">Rezervace místností</b><span class="src"><span class="mini" style="--tone:var(--c-design)"><svg class="i"><use href="#i-design"/></svg></span>stránka Figmy Rezervace</span></div>
+      <div class="node l1"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="key">RZ-3</span><span class="ell">Rezervace místnosti</span><span class="src"><span class="mini" style="--tone:var(--c-story)"><svg class="i"><use href="#i-story"/></svg></span>Analytik, 4 kritéria</span></div>
+      <div class="node l2"><span class="type ty-task"><svg class="i"><use href="#t-task"/></svg></span><span class="key">RZ-9</span><span class="ell">API kontrakt rezervací</span><span class="src"><span class="mini" style="--tone:var(--c-split)"><svg class="i"><use href="#i-api"/></svg></span>API · oba repozitáře</span></div>
+      <div class="node l2"><span class="type ty-task"><svg class="i"><use href="#t-task"/></svg></span><span class="key">RZ-10</span><span class="ell">Endpoint a tabulka rezervací</span><span class="src"><span class="mini" style="--tone:var(--c-be)"><svg class="i"><use href="#i-be"/></svg></span>BE · rezervace-api</span></div>
+      <div class="node l2"><span class="type ty-task"><svg class="i"><use href="#t-task"/></svg></span><span class="key">RZ-11</span><span class="ell">Mřížka týdne a výběr místnosti</span><span class="src"><span class="mini" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span>FE · rezervace-web</span></div>
+      <div class="node l2"><span class="type ty-bug"><svg class="i"><use href="#t-bug"/></svg></span><span class="key">RZ-14</span><span class="ell">Kalendář ukazuje jména ostatních</span><span class="src"><span class="mini" style="--tone:var(--c-test)"><svg class="i"><use href="#i-test"/></svg></span>selhaný test</span></div>
+      <div class="node l1"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="key">RZ-4</span><span class="ell">Zrušení rezervace</span><span class="src"><span class="mini" style="--tone:var(--c-story)"><svg class="i"><use href="#i-story"/></svg></span>Analytik, 3 kritéria</span></div>
+      <div class="node l2"><span class="type ty-bug"><svg class="i"><use href="#t-bug"/></svg></span><span class="key">RZ-15</span><span class="ell">Tlačítko Zrušit je mimo obrazovku na mobilu</span><span class="src"><span class="mini" style="--tone:var(--c-preview)"><svg class="i"><use href="#i-preview"/></svg></span>anotace v náhledu</span></div>
+    </div>
+    <div class="rules">
+      <div><span class="type ty-epic"><svg class="i"><use href="#t-epic"/></svg></span><span><b>Epic</b> vzniká ze stránky Figmy nebo ze zadání. Seskupuje stories a má jednu stránku wiki.</span></div>
+      <div><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span><b>Story</b> píše Analytik i s kritérii. Je hotová, až projdou všechny její testy.</span></div>
+      <div><span class="type ty-task"><svg class="i"><use href="#t-task"/></svg></span><span><b>Task</b> vzniká při rozpadu, s vrstvou FE, BE nebo API a svým repozitářem. Sub-task jen když je task velký.</span></div>
+      <div><span class="type ty-bug"><svg class="i"><use href="#t-bug"/></svg></span><span><b>Bug</b> vznikne sám ze selhaného testu nebo z anotace v náhledu a visí pod svou story.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Nejen web</h2>
+      <p class="muted">Reactor je pro jakýkoli vývoj. Platforma je vlastnost repozitáře: určuje, jak agent staví, jak vypadá náhled a čím se testuje. Tok práce, hierarchie i agenti jsou všude stejné.</p>
+    </div>
+    <div class="platforms">
+      <div class="platform"><span class="tile" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-globe"/></svg></span><h3>Web</h3><dl><dt>Stack</dt><dd>React, Vue, Angular</dd><dt>Náhled</dt><dd>Prohlížeč v kontejneru</dd><dt>Testy</dt><dd>Playwright</dd></dl></div>
+      <div class="platform"><span class="tile" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-phone"/></svg></span><h3>Mobil</h3><dl><dt>Stack</dt><dd>Swift, Kotlin, React Native, Flutter</dd><dt>Náhled</dt><dd>Zatím ne</dd><dt>Testy</dt><dd>Maestro, XCUITest, Espresso</dd></dl></div>
+      <div class="platform"><span class="tile" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-desktop"/></svg></span><h3>Desktop</h3><dl><dt>Stack</dt><dd>Electron, Tauri, .NET, Qt</dd><dt>Náhled</dt><dd>Okno aplikace přes vzdálenou plochu jako v aFinderu</dd><dt>Testy</dt><dd>Playwright pro Electron, WinAppDriver</dd></dl></div>
+      <div class="platform"><span class="tile" style="--tone:var(--c-be)"><svg class="i"><use href="#i-be"/></svg></span><h3>Backend</h3><dl><dt>Stack</dt><dd>Node, .NET, Java, Python</dd><dt>Náhled</dt><dd>Kontejner s API a ukázkovými daty</dd><dt>Testy</dt><dd>API testy proti kontraktu</dd></dl></div>
+      <div class="platform"><span class="tile" style="--tone:var(--c-split)"><svg class="i"><use href="#i-box"/></svg></span><h3>Knihovna a CLI</h3><dl><dt>Stack</dt><dd>Balíček, SDK, nástroj</dd><dt>Náhled</dt><dd>Terminál a ukázkový projekt</dd><dt>Testy</dt><dd>Unit a integrační testy</dd></dl></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Každý repozitář svůj agent</h2>
+      <p class="muted">Klienti a backend běží souběžně, každý ve svém repozitáři se svým agentem. Spojuje je API kontrakt, který vzniká jako první task a všechny repozitáře ho mají u sebe. Klient do hotového backendu volá mock z kontraktu, takže na sebe nečekají. Náhled pak spustí vše spolu a testy jdou proti celku.</p>
+    </div>
+    <div class="repos">
+      <div class="repostack">
+        <div class="repo" style="--tone:var(--c-fe)"><div class="row"><span class="mini"><svg class="i"><use href="#i-globe"/></svg></span><b>rezervace-web</b><span class="grow"></span><span class="st run"><svg><use href="#s-run"/></svg></span></div><span class="small">FE vývojář · Claude Code · větev rz-11-mrizka-tydne</span><span class="file">src/api/client.ts ← z kontraktu</span></div>
+        <div class="repo" style="--tone:var(--c-fe)"><div class="row"><span class="mini"><svg class="i"><use href="#i-phone"/></svg></span><b>rezervace-mobile</b><span class="grow"></span><span class="st"><svg><use href="#s-todo"/></svg></span></div><span class="small">FE vývojář · Codex · React Native</span><span class="file">src/api/client.ts ← z kontraktu</span></div>
+      </div>
+      <div class="contract"><span class="mini" style="--tone:var(--c-split)"><svg class="i"><use href="#i-api"/></svg></span><b>openapi.yaml</b><span>RZ-9 · schválený kontrakt, verze 3</span></div>
+      <div class="repo" style="--tone:var(--c-be)"><div class="row"><span class="mini"><svg class="i"><use href="#i-be"/></svg></span><b>rezervace-api</b><span class="grow"></span><span class="st run"><svg><use href="#s-run"/></svg></span></div><span class="small">BE vývojář · Codex · větev rz-10-rezervace</span><span class="file">openapi.yaml ← kontrakt</span></div>
+    </div>
+    <div class="rules">
+      <div><span class="mini" style="--tone:var(--c-split)"><svg class="i"><use href="#i-repo"/></svg></span><span><b>Projekt má repozitáře</b> s platformou: web, mobil, desktop, backend, nebo jeden pro všechno. Task ví, do kterého patří.</span></div>
+      <div><span class="mini" style="--tone:var(--c-split)"><svg class="i"><use href="#i-api"/></svg></span><span><b>Změna kontraktu</b> je vlastní task ke schválení a vrátí rozpracované tasky všech dotčených repozitářů ke kontrole.</span></div>
+      <div><span class="mini" style="--tone:var(--c-preview)"><svg class="i"><use href="#i-preview"/></svg></span><span><b>Náhled</b> skládá větve všech repozitářů stejné story do jednoho prostředí: backend v kontejneru, web v prohlížeči, desktop v okně.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Agenti jako tým</h2>
+      <p class="muted">Místo jednoho chatu několik rolí. Každá má svůj kontext a ikonu a v UI je vidět, kdo na čem pracuje. Konzultace se otevírá přímo u věci, které se týká: u story, úkolu, kritéria nebo vrstvy designu.</p>
+    </div>
+    <div class="team">
+      <div class="agent" style="--tone:var(--c-story)"><span class="tile"><svg class="i"><use href="#i-story"/></svg></span><h3>Analytik</h3><p>Z designu a popisu navrhuje story a akceptační kritéria, hlídá konzistenci.</p></div>
+      <div class="agent" style="--tone:var(--c-split)"><span class="tile"><svg class="i"><use href="#i-split"/></svg></span><h3>Architekt</h3><p>Rozpadne story na FE a BE, navrhne API kontrakt a diagramy.</p></div>
+      <div class="agent" style="--tone:var(--c-fe)"><span class="tile"><svg class="i"><use href="#i-fe"/></svg></span><h3>FE vývojář</h3><p>Implementuje klienta podle Figmy: web, iOS a Android nebo desktop. Jeden na každý klientský repozitář.</p></div>
+      <div class="agent" style="--tone:var(--c-be)"><span class="tile"><svg class="i"><use href="#i-be"/></svg></span><h3>BE vývojář</h3><p>Implementuje API a data proti kontraktu od architekta.</p></div>
+      <div class="agent" style="--tone:var(--c-test)"><span class="tile"><svg class="i"><use href="#i-test"/></svg></span><h3>Tester</h3><p>Ke každému kritériu napíše test pro danou platformu, ze selhání založí bug.</p></div>
+      <div class="agent" style="--tone:var(--c-wiki)"><span class="tile"><svg class="i"><use href="#i-wiki"/></svg></span><h3>Dokumentarista</h3><p>Po zelených testech aktualizuje wiki: co aplikace umí a jak se používá.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Šest stavů, všude stejně</h2>
+      <p class="muted">Tvar říká stav, barva kategorii. Stav se nikdy nepíše dlouhou větou ani pilulkou s textem.</p>
+    </div>
+    <div class="states">
+      <span class="state"><span class="st"><svg><use href="#s-todo"/></svg></span>Čeká</span>
+      <span class="state"><span class="st run"><svg><use href="#s-run"/></svg></span>Pracuje</span>
+      <span class="state"><span class="st wait"><svg><use href="#s-wait"/></svg></span>Ke schválení</span>
+      <span class="state"><span class="st ok"><svg><use href="#s-ok"/></svg></span>Hotovo</span>
+      <span class="state"><span class="st err"><svg><use href="#s-err"/></svg></span>Selhalo</span>
+      <span class="state"><span class="st block"><svg><use href="#s-block"/></svg></span>Blokováno</span>
+    </div>
+  </section>
+
+  <section id="obrazovky">
+    <div class="prose">
+      <h2>Obrazovky</h2>
+      <p class="muted">Ukázky na projektu Rezervace zasedaček. Žebřík nahoře je zároveň navigace, levé menu fází zmizí.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Obrazovky návrhu">
+      <button role="tab" id="t-prehled" aria-selected="true" aria-controls="v-prehled">Přehled projektu</button>
+      <button role="tab" id="t-board" aria-selected="false" aria-controls="v-board">Board stories</button>
+      <button role="tab" id="t-detail" aria-selected="false" aria-controls="v-detail">Detail story</button>
+      <button role="tab" id="t-agent" aria-selected="false" aria-controls="v-agent">Agent při práci</button>
+      <button role="tab" id="t-wiki" aria-selected="false" aria-controls="v-wiki">Wiki</button>
+      <button role="tab" id="t-vibe" aria-selected="false" aria-controls="v-vibe">Vibe coding</button>
+    </div>
+
+    <!-- shared header is repeated per view so each view is a complete screen -->
+    <div id="v-prehled" role="tabpanel" aria-labelledby="t-prehled" class="view">
+      <p class="caption">Výchozí obrazovka projektu. Nahoře průchod stories krokem, vpravo kdo z týmu pracuje. Uprostřed jen to, co čeká na vás.</p>
+      <div class="scroller"><div class="app">
+        <div class="card top">
+          <span class="iconbtn"><svg class="i"><use href="#i-back"/></svg></span>
+          <span class="name"><b>Rezervace zasedaček</b><small>Session 2</small></span>
+          <div class="ladder">
+            <span class="rung now" style="--tone:var(--accent)"><span class="dot"><svg class="i"><use href="#i-grid"/></svg></span>Přehled</span><span class="link done"></span>
+            <span class="rung done" style="--tone:var(--c-design)"><span class="dot"><svg class="i"><use href="#i-design"/></svg></span>Design</span><span class="link done"></span>
+            <span class="rung done" style="--tone:var(--c-story)"><span class="dot"><svg class="i"><use href="#i-story"/></svg></span>Stories</span><span class="link done"></span>
+            <span class="rung" style="--tone:var(--c-split)"><span class="dot"><svg class="i"><use href="#i-split"/></svg></span>Rozpad</span><span class="link"></span>
+            <span class="rung" style="--tone:var(--c-fe)"><span class="dot"><svg class="i"><use href="#i-code"/></svg></span>Implementace</span><span class="link"></span>
+            <span class="rung" style="--tone:var(--c-preview)"><span class="dot"><svg class="i"><use href="#i-preview"/></svg></span>Náhled</span><span class="link"></span>
+            <span class="rung" style="--tone:var(--c-test)"><span class="dot"><svg class="i"><use href="#i-test"/></svg></span>Testy</span><span class="link"></span>
+            <span class="rung" style="--tone:var(--c-wiki)"><span class="dot"><svg class="i"><use href="#i-wiki"/></svg></span>Wiki</span>
+          </div>
+          <span class="btn primary"><svg class="i"><use href="#i-play"/></svg>Pokračovat</span>
+        </div>
+        <div class="body" style="grid-template-columns: minmax(0,1fr) 300px">
+          <div class="card pane">
+            <h4>Průchod stories <span class="muted">2 epiky · 8 stories · 2 bugy</span></h4>
+            <div class="pipe">
+              <div style="--tone:var(--c-story)"><span class="row"><span class="mini"><svg class="i"><use href="#i-story"/></svg></span>Stories</span><span class="big">8</span><span class="bar"><i style="width:100%"></i></span></div>
+              <div style="--tone:var(--c-split)"><span class="row"><span class="mini"><svg class="i"><use href="#i-split"/></svg></span>Rozpad</span><span class="big">6</span><span class="bar"><i style="width:75%"></i></span></div>
+              <div style="--tone:var(--c-fe)"><span class="row"><span class="mini"><svg class="i"><use href="#i-fe"/></svg></span>Frontend</span><span class="big">4</span><span class="bar"><i style="width:50%"></i></span></div>
+              <div style="--tone:var(--c-be)"><span class="row"><span class="mini"><svg class="i"><use href="#i-be"/></svg></span>Backend</span><span class="big">5</span><span class="bar"><i style="width:62%"></i></span></div>
+              <div style="--tone:var(--c-preview)"><span class="row"><span class="mini"><svg class="i"><use href="#i-preview"/></svg></span>Náhled</span><span class="big">3</span><span class="bar"><i style="width:37%"></i></span></div>
+              <div style="--tone:var(--c-test)"><span class="row"><span class="mini"><svg class="i"><use href="#i-test"/></svg></span>Testy</span><span class="big">2</span><span class="bar"><i style="width:25%"></i></span></div>
+              <div style="--tone:var(--c-wiki)"><span class="row"><span class="mini"><svg class="i"><use href="#i-wiki"/></svg></span>Wiki</span><span class="big">1</span><span class="bar"><i style="width:12%"></i></span></div>
+            </div>
+            <h4 style="margin-top:8px">Čeká na vás <span class="muted">3</span></h4>
+            <div class="attn">
+              <div class="row"><span class="st wait"><svg><use href="#s-wait"/></svg></span><span class="mini" style="--tone:var(--c-split)"><svg class="i"><use href="#i-split"/></svg></span><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="grow ell"><b>RZ-4 Zrušení rezervace</b> · rozpad na 3 tasky ke schválení</span><span class="btn">Projít</span></div>
+              <div class="row"><span class="st err"><svg><use href="#s-err"/></svg></span><span class="mini" style="--tone:var(--c-test)"><svg class="i"><use href="#i-test"/></svg></span><span class="type ty-bug"><svg class="i"><use href="#t-bug"/></svg></span><span class="grow ell"><b>RZ-14 Kalendář ukazuje jména</b> · bug ze selhaného testu</span><span class="btn">Otevřít</span></div>
+              <div class="row"><span class="st wait"><svg><use href="#s-wait"/></svg></span><span class="mini" style="--tone:var(--c-preview)"><svg class="i"><use href="#i-preview"/></svg></span><span class="type ty-bug"><svg class="i"><use href="#t-bug"/></svg></span><span class="grow ell"><b>RZ-15 Tlačítko Zrušit mimo obrazovku</b> · bug z anotace v náhledu</span><span class="btn">Zpracovat</span></div>
+            </div>
+          </div>
+          <div class="card pane">
+            <h4>Tým</h4>
+            <div class="crew">
+              <div class="row"><span class="mini" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span><span class="grow"><b>FE vývojář</b><div class="small ell">RZ-11 · rezervace-web</div></span><span class="st run"><svg><use href="#s-run"/></svg></span></div>
+              <div class="row"><span class="mini" style="--tone:var(--c-be)"><svg class="i"><use href="#i-be"/></svg></span><span class="grow"><b>BE vývojář</b><div class="small ell">RZ-10 · rezervace-api</div></span><span class="st run"><svg><use href="#s-run"/></svg></span></div>
+              <div class="row"><span class="mini" style="--tone:var(--c-split)"><svg class="i"><use href="#i-split"/></svg></span><span class="grow"><b>Architekt</b><div class="small ell">Čeká na schválení RZ-4</div></span><span class="st wait"><svg><use href="#s-wait"/></svg></span></div>
+              <div class="row"><span class="mini" style="--tone:var(--c-test)"><svg class="i"><use href="#i-test"/></svg></span><span class="grow"><b>Tester</b><div class="small ell">Volný</div></span><span class="st"><svg><use href="#s-todo"/></svg></span></div>
+              <div class="row"><span class="mini" style="--tone:var(--c-story)"><svg class="i"><use href="#i-story"/></svg></span><span class="grow"><b>Analytik</b><div class="small ell">Volný</div></span><span class="st"><svg><use href="#s-todo"/></svg></span></div>
+              <div class="row"><span class="mini" style="--tone:var(--c-wiki)"><svg class="i"><use href="#i-wiki"/></svg></span><span class="grow"><b>Dokumentarista</b><div class="small ell">Wiki RZ-2 Přehled místností</div></span><span class="st ok"><svg><use href="#s-ok"/></svg></span></div>
+            </div>
+            <div class="composer" style="margin-top:auto"><svg class="i"><use href="#i-chat"/></svg>Zeptat se týmu…<span class="send"><svg class="i"><use href="#i-play"/></svg></span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div id="v-board" role="tabpanel" aria-labelledby="t-board" class="view" hidden>
+      <p class="caption">Řádek je epic, sloupec krok. Na kartě je typ a klíč jako v Jiře, náhled obrazovky z Figmy a stopa tasků: barva říká vrstvu, tvar stav. Bugy jsou na boardu vedle stories. Avatar ukazuje, který agent na položce pracuje.</p>
+      <div class="scroller"><div class="app">
+        <div class="card top">
+          <span class="iconbtn"><svg class="i"><use href="#i-back"/></svg></span>
+          <span class="name"><b>Rezervace zasedaček</b><small>Session 2</small></span>
+          <div class="ladder">
+            <span class="rung" style="--tone:var(--accent)"><span class="dot"><svg class="i"><use href="#i-grid"/></svg></span>Přehled</span><span class="link done"></span>
+            <span class="rung done" style="--tone:var(--c-design)"><span class="dot"><svg class="i"><use href="#i-design"/></svg></span>Design</span><span class="link done"></span>
+            <span class="rung now" style="--tone:var(--c-story)"><span class="dot"><svg class="i"><use href="#i-board"/></svg></span>Stories</span><span class="link"></span>
+            <span class="rung" style="--tone:var(--c-split)"><span class="dot"><svg class="i"><use href="#i-split"/></svg></span>Rozpad</span><span class="link"></span>
+            <span class="rung" style="--tone:var(--c-fe)"><span class="dot"><svg class="i"><use href="#i-code"/></svg></span>Implementace</span><span class="link"></span>
+            <span class="rung" style="--tone:var(--c-preview)"><span class="dot"><svg class="i"><use href="#i-preview"/></svg></span>Náhled</span><span class="link"></span>
+            <span class="rung" style="--tone:var(--c-test)"><span class="dot"><svg class="i"><use href="#i-test"/></svg></span>Testy</span><span class="link"></span>
+            <span class="rung" style="--tone:var(--c-wiki)"><span class="dot"><svg class="i"><use href="#i-wiki"/></svg></span>Wiki</span>
+          </div>
+          <span class="btn primary"><svg class="i"><use href="#i-spark"/></svg>Navrhnout stories</span>
+        </div>
+        <div class="card" style="background:var(--window);box-shadow:none">
+          <div class="lane"><span class="type ty-epic"><svg class="i"><use href="#t-epic"/></svg></span><span class="key">RZ-1</span>Rezervace místností<span class="small">8 položek · 2 hotové</span><span class="bar"><i style="width:25%"></i></span></div>
+          <div class="cols">
+            <div class="col" style="--tone:var(--c-story)">
+              <div class="colhead"><span class="mini"><svg class="i"><use href="#i-story"/></svg></span>Story<span class="n">2</span></div>
+              <div class="story"><div class="thumb"><i style="left:8px;top:8px;width:40%;height:8px"></i><i style="left:8px;top:22px;width:80%;height:24px"></i></div><div class="row"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="key">RZ-7</span></div><b>Opakovaná rezervace</b><div class="trail"><span class="chip"><span class="st"><svg><use href="#s-todo"/></svg></span>4 kritéria</span></div></div>
+              <div class="story"><div class="thumb"><i style="left:8px;top:8px;width:30%;height:38px"></i><i style="left:40%;top:8px;width:52%;height:38px"></i></div><div class="row"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="key">RZ-8</span></div><b>Notifikace e-mailem</b><div class="trail"><span class="chip"><span class="st"><svg><use href="#s-todo"/></svg></span>2 kritéria</span></div></div>
+            </div>
+            <div class="col" style="--tone:var(--c-split)">
+              <div class="colhead"><span class="mini"><svg class="i"><use href="#i-split"/></svg></span>Rozpad<span class="n">1</span></div>
+              <div class="story"><div class="thumb"><i style="left:8px;top:8px;width:84%;height:10px"></i><i style="left:8px;top:24px;width:50%;height:22px"></i></div><div class="row"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="key">RZ-4</span></div><b>Zrušení rezervace</b><div class="trail"><span class="chip"><span class="tone" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span><span class="st wait"><svg><use href="#s-wait"/></svg></span></span><span class="chip"><span class="tone" style="--tone:var(--c-be)"><svg class="i"><use href="#i-be"/></svg></span><span class="st wait"><svg><use href="#s-wait"/></svg></span></span><span class="chip"><span class="tone" style="--tone:var(--c-split)"><svg class="i"><use href="#i-api"/></svg></span><span class="st wait"><svg><use href="#s-wait"/></svg></span></span><span class="who-av" style="--tone:var(--c-split)"><svg class="i"><use href="#i-split"/></svg></span></div></div>
+            </div>
+            <div class="col" style="--tone:var(--c-fe)">
+              <div class="colhead"><span class="mini"><svg class="i"><use href="#i-code"/></svg></span>Implementace<span class="n">2</span></div>
+              <div class="story sel"><div class="thumb"><i style="left:8px;top:8px;width:20%;height:38px"></i><i style="left:28%;top:8px;width:64%;height:38px"></i></div><div class="row"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="key">RZ-3</span></div><b>Rezervace místnosti</b><div class="trail"><span class="chip"><span class="tone" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span><span class="st run"><svg><use href="#s-run"/></svg></span></span><span class="chip"><span class="tone" style="--tone:var(--c-be)"><svg class="i"><use href="#i-be"/></svg></span><span class="st run"><svg><use href="#s-run"/></svg></span></span><span class="chip"><span class="tone" style="--tone:var(--c-split)"><svg class="i"><use href="#i-api"/></svg></span><span class="st ok"><svg><use href="#s-ok"/></svg></span></span><span class="who-av" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span></div></div>
+              <div class="story"><div class="thumb"><i style="left:8px;top:8px;width:84%;height:38px"></i></div><div class="row"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="key">RZ-5</span></div><b>Filtr podle kapacity</b><div class="trail"><span class="chip"><span class="tone" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span><span class="st"><svg><use href="#s-todo"/></svg></span></span><span class="chip"><span class="tone" style="--tone:var(--c-be)"><svg class="i"><use href="#i-be"/></svg></span><span class="st ok"><svg><use href="#s-ok"/></svg></span></span></div></div>
+            </div>
+            <div class="col" style="--tone:var(--c-preview)">
+              <div class="colhead"><span class="mini"><svg class="i"><use href="#i-preview"/></svg></span>Náhled<span class="n">1</span></div>
+              <div class="story"><div class="thumb"><i style="left:8px;top:8px;width:40%;height:38px"></i><i style="left:52%;top:8px;width:40%;height:38px"></i></div><div class="row"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="key">RZ-6</span></div><b>Detail místnosti</b><div class="trail"><span class="chip"><span class="st wait"><svg><use href="#s-wait"/></svg></span>2 anotace</span></div></div>
+            </div>
+            <div class="col" style="--tone:var(--c-test)">
+              <div class="colhead"><span class="mini"><svg class="i"><use href="#i-test"/></svg></span>Testy<span class="n">2</span></div>
+              <div class="story"><div class="thumb"><i style="left:8px;top:8px;width:84%;height:14px"></i><i style="left:8px;top:28px;width:84%;height:18px"></i></div><div class="row"><span class="type ty-story"><svg class="i"><use href="#t-story"/></svg></span><span class="key">RZ-2</span></div><b>Přehled místností</b><div class="trail"><span class="chip"><span class="st ok"><svg><use href="#s-ok"/></svg></span>3</span><span class="chip"><span class="st err"><svg><use href="#s-err"/></svg></span>1</span></div></div>
+              <div class="story"><div class="row"><span class="type ty-bug"><svg class="i"><use href="#t-bug"/></svg></span><span class="key">RZ-14</span></div><b>Kalendář ukazuje jména ostatních</b><div class="trail"><span class="chip"><span class="tone" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span><span class="st run"><svg><use href="#s-run"/></svg></span></span><span class="small">pod RZ-3</span><span class="who-av" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span></div></div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div id="v-detail" role="tabpanel" aria-labelledby="t-detail" class="view" hidden>
+      <p class="caption">Jedna story na jedné obrazovce, s epicem nad ní. Vlevo design s vyznačenými vrstvami. Uprostřed kritéria, každé s testem a výsledkem. Vpravo tasky a bugy, každý s klíčem, repozitářem, agentem, stavem a soubory, které změnil.</p>
+      <div class="scroller"><div class="app">
+        <div class="card top">
+          <span class="iconbtn"><svg class="i"><use href="#i-back"/></svg></span>
+          <span class="type ty-story" style="width:22px;height:22px;border-radius:6px"><svg class="i"><use href="#t-story"/></svg></span>
+          <span class="name"><span class="crumb"><span class="type ty-epic"><svg class="i"><use href="#t-epic"/></svg></span>RZ-1 Rezervace místností</span><b>RZ-3 Rezervace místnosti</b></span>
+          <span class="grow"></span>
+          <span class="btn"><svg class="i"><use href="#i-chat"/></svg>Konzultovat</span>
+          <span class="btn primary"><svg class="i"><use href="#i-preview"/></svg>Otevřít náhled</span>
+        </div>
+        <div class="body" style="grid-template-columns: 300px minmax(0,1fr) 340px">
+          <div class="card pane" style="--tone:var(--c-design)">
+            <h4><span class="mini"><svg class="i"><use href="#i-design"/></svg></span>Design <span class="muted">Kalendář · Figma</span></h4>
+            <div class="frame">
+              <i style="width:45%;height:10px"></i>
+              <div style="display:flex;gap:6px;flex:1"><i style="width:28%"></i><i style="flex:1"></i></div>
+              <span class="mark" style="left:34%;top:42px;width:58%;height:120px"></span><span class="tag" style="left:34%;top:28px">Mřížka týdne</span>
+              <span class="mark" style="left:12px;top:42px;width:26%;height:60px"></span><span class="tag" style="left:12px;top:106px">Výběr místnosti</span>
+            </div>
+            <div class="small">2 vrstvy navázané na story · synchronizováno dnes 9:40</div>
+          </div>
+          <div class="card pane">
+            <h4>Kritéria a testy <span class="muted">3 z 4 ověřeno</span></h4>
+            <div class="crit">
+              <div class="row"><span class="st ok"><svg><use href="#s-ok"/></svg></span><p class="grow">Při volném termínu se rezervace uloží a objeví v kalendáři.</p><span class="chip"><span class="tone" style="--tone:var(--c-test)"><svg class="i"><use href="#i-test"/></svg></span>1,2 s</span></div>
+              <div class="row"><span class="st ok"><svg><use href="#s-ok"/></svg></span><p class="grow">Obsazený termín nejde vybrat.</p><span class="chip"><span class="tone" style="--tone:var(--c-test)"><svg class="i"><use href="#i-test"/></svg></span>0,8 s</span></div>
+              <div class="row"><span class="st ok"><svg><use href="#s-ok"/></svg></span><p class="grow">Rezervace delší než 4 hodiny se odmítne s hláškou.</p><span class="chip"><span class="tone" style="--tone:var(--c-test)"><svg class="i"><use href="#i-test"/></svg></span>0,9 s</span></div>
+              <div class="row"><span class="st run"><svg><use href="#s-run"/></svg></span><p class="grow">Kalendář ukazuje rezervace ostatních bez jmen.</p><span class="chip"><span class="type ty-bug" style="width:14px;height:14px"><svg class="i"><use href="#t-bug"/></svg></span>RZ-14</span></div>
+            </div>
+            <h4 style="margin-top:6px">Konzultace k story</h4>
+            <div class="thread">
+              <div class="bubble me">Má jít rezervovat i přes víkend?</div>
+              <div class="bubble ai"><b>Analytik:</b> Design víkend neukazuje. Navrhuji kritérium „Sobota a neděle nejdou vybrat“. Přidat?</div>
+            </div>
+            <div class="composer"><svg class="i"><use href="#i-chat"/></svg>Napsat k RZ-3…<span class="send"><svg class="i"><use href="#i-play"/></svg></span></div>
+          </div>
+          <div class="card pane">
+            <h4>Tasky a bugy <span class="muted">rozpad od Architekta</span></h4>
+            <div class="task" style="--tone:var(--c-split)"><span class="mini"><svg class="i"><use href="#i-api"/></svg></span><span class="grow"><b>API kontrakt</b><div class="small"><span class="key">RZ-9</span> · oba repozitáře</div></span><span class="st ok"><svg><use href="#s-ok"/></svg></span><div class="files"><span class="file">POST /reservations</span><span class="file">GET /rooms/:id/slots</span></div></div>
+            <div class="task" style="--tone:var(--c-be)"><span class="mini"><svg class="i"><use href="#i-be"/></svg></span><span class="grow"><b>Backend</b><div class="small"><span class="key">RZ-10</span> · rezervace-api · Codex</div></span><span class="st run"><svg><use href="#s-run"/></svg></span><div class="files"><span class="file">api/reservations.ts</span><span class="file">db/schema.sql</span></div></div>
+            <div class="task" style="--tone:var(--c-fe)"><span class="mini"><svg class="i"><use href="#i-fe"/></svg></span><span class="grow"><b>Frontend</b><div class="small"><span class="key">RZ-11</span> · rezervace-web · Claude Code</div></span><span class="st run"><svg><use href="#s-run"/></svg></span><div class="files"><span class="file">WeekGrid.tsx</span><span class="file">RoomPicker.tsx</span></div></div>
+            <div class="task" style="--tone:var(--t-bug)"><span class="mini"><svg class="i"><use href="#t-bug"/></svg></span><span class="grow"><b>Jména ostatních v kalendáři</b><div class="small"><span class="key">RZ-14</span> · ze selhaného testu · rezervace-web</div></span><span class="st run"><svg><use href="#s-run"/></svg></span></div>
+            <div class="task" style="--tone:var(--c-wiki)"><span class="mini"><svg class="i"><use href="#i-wiki"/></svg></span><span class="grow"><b>Wiki</b><div class="small">Dokumentarista · po zelených testech</div></span><span class="st block"><svg><use href="#s-block"/></svg></span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div id="v-agent" role="tabpanel" aria-labelledby="t-agent" class="view" hidden>
+      <p class="caption">Co agent dělá, krok po kroku, s ikonou podle druhu akce. Výsledek nejde rovnou do projektu: je to návrh se změnami, který přijmete nebo vrátíte s komentářem.</p>
+      <div class="scroller"><div class="app">
+        <div class="card top">
+          <span class="iconbtn"><svg class="i"><use href="#i-back"/></svg></span>
+          <span class="mini" style="--tone:var(--c-fe)"><svg class="i"><use href="#i-fe"/></svg></span>
+          <span class="name"><b>FE vývojář · RZ-11 Mřížka týdne</b><small>rezervace-web · Claude Code · worker mac-local</small></span>
+          <span class="grow"></span>
+          <span class="small num">6 min 12 s · 48 tis. tokenů</span>
+          <span class="btn">Zastavit</span>
+        </div>
+        <div class="body" style="grid-template-columns: minmax(0,1fr) 380px">
+          <div class="card pane">
+            <h4>Průběh</h4>
+            <div class="timeline">
+              <div class="ev"><span class="k"><svg class="i"><use href="#i-search"/></svg></span><div><b>Přečetl úkol a design</b><div class="small">RZ-11, kritéria RZ-3, Figma Kalendář (2 vrstvy), kontrakt RZ-9</div></div><span class="small num">0:04</span></div>
+              <div class="ev"><span class="k"><svg class="i"><use href="#i-file"/></svg></span><div><b>Vytvořil WeekGrid.tsx</b><div class="small">Mřížka týdne, sloty po 30 minutách</div></div><span class="small num">1:20</span></div>
+              <div class="ev"><span class="k"><svg class="i"><use href="#i-file"/></svg></span><div><b>Upravil RoomPicker.tsx</b><div class="small">Výběr místnosti podle kapacity</div></div><span class="small num">3:02</span></div>
+              <div class="ev"><span class="k"><svg class="i"><use href="#i-term"/></svg></span><div><b>Spustil build a testy</b><div class="term"><span class="d">$ npm test -- reservation</span>
+<span class="g">✓</span> volný termín se uloží
+<span class="g">✓</span> obsazený termín nejde vybrat
+<span class="r">✗</span> rezervace ostatních bez jmen</div></div><span class="small num">5:40</span></div>
+              <div class="ev"><span class="k" style="color:var(--run)"><svg class="i pulse"><use href="#i-code"/></svg></span><div><b>Opravuje anonymizaci jmen</b><div class="small">WeekGrid.tsx</div></div><span class="small num">6:12</span></div>
+            </div>
+          </div>
+          <div class="card pane">
+            <h4><span class="st wait"><svg><use href="#s-wait"/></svg></span>Návrh ke schválení</h4>
+            <div class="proposal">
+              <div class="diffrow"><svg class="i"><use href="#i-file"/></svg><span class="grow">WeekGrid.tsx</span><span class="plus">+142</span></div>
+              <div class="diffrow"><svg class="i"><use href="#i-file"/></svg><span class="grow">RoomPicker.tsx</span><span class="plus">+18</span><span class="minus">−6</span></div>
+              <div class="diffrow"><svg class="i"><use href="#i-file"/></svg><span class="grow">reservation.spec.ts</span><span class="plus">+40</span></div>
+            </div>
+            <div class="row" style="gap:8px"><span class="btn primary"><svg class="i"><use href="#i-check"/></svg>Přijmout</span><span class="btn">Vrátit s komentářem</span><span class="btn">Diff</span></div>
+            <h4 style="margin-top:6px">Zeptat se FE vývojáře</h4>
+            <div class="thread">
+              <div class="bubble me">Proč sloty po 30 minutách?</div>
+              <div class="bubble ai">Figma má mřížku po půlhodinách a kritérium o 4 hodinách se tak dá hlídat celými sloty.</div>
+            </div>
+            <div class="composer"><svg class="i"><use href="#i-chat"/></svg>Napsat agentovi…<span class="send"><svg class="i"><use href="#i-play"/></svg></span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <div id="v-wiki" role="tabpanel" aria-labelledby="t-wiki" class="view" hidden>
+      <p class="caption">Poslední krok. Když projdou testy, Dokumentarista přepíše stránku epicu: krátce co funkce umí, jak se používá a jaká platí pravidla. Píše pro lidi, ne pro vývojáře. Změny jsou návrh ke schválení jako u kódu.</p>
+      <div class="scroller"><div class="app">
+        <div class="card top">
+          <span class="iconbtn"><svg class="i"><use href="#i-back"/></svg></span>
+          <span class="name"><b>Rezervace zasedaček</b><small>Session 2</small></span>
+          <div class="ladder">
+            <span class="rung done" style="--tone:var(--c-story)"><span class="dot"><svg class="i"><use href="#i-board"/></svg></span>Stories</span><span class="link done"></span>
+            <span class="rung done" style="--tone:var(--c-fe)"><span class="dot"><svg class="i"><use href="#i-code"/></svg></span>Implementace</span><span class="link done"></span>
+            <span class="rung done" style="--tone:var(--c-preview)"><span class="dot"><svg class="i"><use href="#i-preview"/></svg></span>Náhled</span><span class="link done"></span>
+            <span class="rung done" style="--tone:var(--c-test)"><span class="dot"><svg class="i"><use href="#i-test"/></svg></span>Testy</span><span class="link done"></span>
+            <span class="rung now" style="--tone:var(--c-wiki)"><span class="dot"><svg class="i"><use href="#i-wiki"/></svg></span>Wiki</span>
+          </div>
+          <span class="btn">Historie</span>
+        </div>
+        <div class="body" style="grid-template-columns: 240px minmax(0,1fr) 300px">
+          <div class="card wikitree">
+            <span class="navhead">Wiki</span>
+            <span class="nav"><svg class="i"><use href="#i-wiki"/></svg>O aplikaci</span>
+            <span class="nav"><span class="type ty-epic"><svg class="i"><use href="#t-epic"/></svg></span>Přihlášení</span>
+            <span class="nav cur"><span class="type ty-epic"><svg class="i"><use href="#t-epic"/></svg></span>Rezervace místností</span>
+            <span class="nav l1">Rezervace</span>
+            <span class="nav l1">Zrušení</span>
+            <span class="nav"><span class="type ty-epic"><svg class="i"><use href="#t-epic"/></svg></span>Správa místností</span>
+            <span class="navhead">Pro vývoj</span>
+            <span class="nav"><svg class="i"><use href="#i-api"/></svg>API</span>
+            <span class="nav"><svg class="i"><use href="#i-split"/></svg>Architektura</span>
+          </div>
+          <div class="card">
+            <div class="doc">
+              <h5>Rezervace místností</h5>
+              <div class="meta"><span><span class="type ty-epic"><svg class="i"><use href="#t-epic"/></svg></span>RZ-1</span><span><span class="st ok"><svg><use href="#s-ok"/></svg></span>11 testů prošlo</span><span>Aktualizováno dnes 14:20</span></div>
+              <p>Zaměstnanec si najde volnou zasedačku a zarezervuje ji na konkrétní čas. Ostatní vidí, že je místnost obsazená, ale ne kým.</p>
+              <h6>Jak na to</h6>
+              <ol><li>Vyberte místnost vlevo, podle kapacity nebo vybavení.</li><li>V týdenní mřížce klikněte na volný půlhodinový slot a táhněte.</li><li>Potvrďte. Rezervace se ihned objeví v kalendáři.</li></ol>
+              <h6>Pravidla</h6>
+              <ul><li>Nejdéle 4 hodiny v kuse.</li><li>Obsazený termín nejde vybrat.</li><li>Zrušit může jen ten, kdo rezervaci vytvořil.</li></ul>
+            </div>
+          </div>
+          <div class="card pane">
+            <h4><span class="st wait"><svg><use href="#s-wait"/></svg></span>Změny ke schválení</h4>
+            <div class="changes">
+              <div class="row"><span class="diffrow"><span class="plus">+</span></span><span class="grow">Ostatní nevidí, kdo místnost rezervoval.</span></div>
+              <div class="row"><span class="diffrow"><span class="plus">+</span></span><span class="grow">Pravidlo o 4 hodinách.</span></div>
+              <div class="row"><span class="diffrow"><span class="minus">−</span></span><span class="grow">Zmínka o rezervaci přes víkend.</span></div>
+            </div>
+            <div class="small">Zdroj: RZ-3, RZ-14, 11 testů, Figma Kalendář</div>
+            <div class="row" style="gap:8px"><span class="btn primary"><svg class="i"><use href="#i-check"/></svg>Přijmout</span><span class="btn">Upravit</span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div id="v-vibe" role="tabpanel" aria-labelledby="t-vibe" class="view" hidden>
+      <p class="caption">Stejné UI, jen zúžené. Žebřík má dva kroky, prompt vlevo, náhled vpravo. Epic a stories vznikají na pozadí z promptů, takže projekt jde kdykoli přepnout na Developer nebo Enterprise bez ztráty práce.</p>
+      <div class="scroller"><div class="app">
+        <div class="card top">
+          <span class="iconbtn"><svg class="i"><use href="#i-back"/></svg></span>
+          <span class="name"><b>Rezervace zasedaček</b><small>Vibe coding</small></span>
+          <div class="ladder">
+            <span class="rung done" style="--tone:var(--accent)"><span class="dot"><svg class="i"><use href="#i-chat"/></svg></span>Prompt</span><span class="link done"></span>
+            <span class="rung now" style="--tone:var(--c-preview)"><span class="dot"><svg class="i"><use href="#i-preview"/></svg></span>Náhled</span>
+          </div>
+          <span class="btn">Vibe coding</span>
+        </div>
+        <div class="body" style="grid-template-columns: 360px minmax(0,1fr)">
+          <div class="card pane">
+            <div class="thread">
+              <div class="bubble me">Aplikace na rezervaci zasedaček s týdenním kalendářem.</div>
+              <div class="bubble ai">Hotovo. Kalendář, výběr místnosti a rezervace. <span class="small">RZ-2, RZ-3</span></div>
+              <div class="bubble me">Ať ostatní nevidí jména.</div>
+            </div>
+            <div class="timeline" style="margin-top:4px">
+              <div class="ev"><span class="k" style="color:var(--run)"><svg class="i pulse"><use href="#i-code"/></svg></span><div><b>Upravuje kalendář</b><div class="small">WeekGrid.tsx</div></div><span class="small num">0:42</span></div>
+            </div>
+            <div class="composer" style="margin-top:auto"><svg class="i"><use href="#i-chat"/></svg>Co dál?<span class="send"><svg class="i"><use href="#i-play"/></svg></span></div>
+          </div>
+          <div class="card pane" style="padding:0;overflow:hidden">
+            <div class="row" style="padding:8px 12px;gap:8px"><span class="st ok"><svg><use href="#s-ok"/></svg></span><span class="small mono">localhost:51835</span></div>
+            <div class="frame" style="margin:0 12px 12px;height:300px"><i style="width:35%;height:12px"></i><div style="display:flex;gap:8px;flex:1"><i style="width:24%"></i><i style="flex:1"></i></div></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Co se mění</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Oblast</th><th>Dnes</th><th>Nově</th></tr></thead>
+      <tbody>
+        <tr><td>Jednotka práce</td><td>Fáze projektu</td><td>Story s rozpadem na tasky FE, BE a API</td></tr>
+        <tr><td>Řazení</td><td>Plochý seznam stories</td><td>Epic, story, task, bug a sub-task s klíči jako v Jiře</td></tr>
+        <tr><td>Platformy</td><td>Jen web</td><td>Web, mobil, desktop, backend i knihovny. Platforma určuje build, náhled a testy</td></tr>
+        <tr><td>Repozitáře</td><td>Jeden workspace</td><td>Každý klient a backend ve vlastním repozitáři, spojené API kontraktem</td></tr>
+        <tr><td>Navigace</td><td>Žebřík i levé menu fází, šest dokovatelných panelů</td><td>Jen žebřík, dokovací panely zmizí. Každý krok má pevné rozložení a vpravo detail vybrané věci</td></tr>
+        <tr><td>Agent</td><td>Jeden chat s tlačítky záměrů</td><td>Role s ikonou. Konzultace u konkrétní story, úkolu nebo kritéria</td></tr>
+        <tr><td>Co se děje</td><td>Logy a tabulka běhů</td><td>Tým v přehledu, průběh agenta jako časová osa, výsledek jako návrh ke schválení</td></tr>
+        <tr><td>Testy</td><td>Report za celý projekt</td><td>Test u každého kritéria, výsledek přímo v detailu story</td></tr>
+        <tr><td>Chyby</td><td>Selhaný test nebo anotace jen v reportu</td><td>Bug pod svou story, s agentem a stavem</td></tr>
+        <tr><td>Dokumentace</td><td>Žádná</td><td>Wiki pro lidi, aktualizovaná agentem po zelených testech</td></tr>
+        <tr><td>Stav</td><td>Text a barevné štítky</td><td>Šest tvarů stavu a osm barev kroků, všude stejně</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Postup</h2>
+    <div class="steps">
+      <div><h3>Ikony a stavy</h3><p>Sada ikon kroků a šest stavů v <code>icons.tsx</code>, barvy kroků jako tokeny ve <code>styles.css</code>. Použít hned v žebříku.</p></div>
+      <div><h3>Hierarchie a repozitáře</h3><p>Epic, story, task a bug s klíči v modelu. Projekt s více repozitáři a jejich platformou, krok Rozpad generuje Architekt i s kontraktem, selhaný test založí bug.</p></div>
+      <div><h3>Platformy</h3><p>Runtime pro desktop (vzdálená plocha jako v aFinderu) a testovací běhy podle platformy. Mobilní náhled zatím ne.</p></div>
+      <div><h3>Board a detail story</h3><p>Nahradí dnešní Zadání. Detail spojí design, kritéria, úkoly a testy.</p></div>
+      <div><h3>Agenti v rolích</h3><p>Role nad stávajícími běhy, FE a BE souběžně ve svých repozitářích, konzultace ukotvená k věci, časová osa běhu.</p></div>
+      <div><h3>Přehled projektu</h3><p>Výchozí obrazovka: průchod stories, tým a co čeká na vás. Dokovací panely zmizí, Vibe coding dostane zúžený žebřík.</p></div>
+      <div><h3>Wiki</h3><p>Stránka na epic, Dokumentarista ji přepíše po zelených testech. Změny ke schválení, historie verzí.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Rozhodnuto</h2>
+    <div class="decided">
+      <div><div class="row"><span class="st ok"><svg><use href="#s-ok"/></svg></span><b>Agent na repozitář, souběžně</b></div><p>Klienti (web, mobil, desktop) a backend každý ve svém repozitáři, spojení API kontraktem. Projekt s jedním repozitářem běží stejně, jen všechny tasky míří do něj.</p></div>
+      <div><div class="row"><span class="st ok"><svg><use href="#s-ok"/></svg></span><b>Vibe coding ve stejném UI</b></div><p>Zúžený žebřík Prompt a Náhled. Stories vznikají na pozadí, přepnutí na Developer nebo Enterprise nic neztratí.</p></div>
+      <div><div class="row"><span class="st ok"><svg><use href="#s-ok"/></svg></span><b>Bez dokovacích panelů</b></div><p>Každý krok má pevné rozložení: hlavní zobrazení a detail vybrané věci vpravo.</p></div>
+      <div><div class="row"><span class="st ok"><svg><use href="#s-ok"/></svg></span><b>Bez napojení na Jiru</b></div><p>Hierarchie epic, story, task a bug žije v Reactoru se stejným řazením a ikonami jako Jira. Import ani synchronizace zatím nebudou.</p></div>
+      <div><div class="row"><span class="st ok"><svg><use href="#s-ok"/></svg></span><b>Wiki v Reactoru</b></div><p>Stránka na epic přímo v projektu, s historií verzí a změnami ke schválení.</p></div>
+      <div><div class="row"><span class="st ok"><svg><use href="#s-ok"/></svg></span><b>Mobil bez náhledu</b></div><p>Mobilní repozitáře agenti implementují a testují, ale simulátor ani emulátor v náhledu zatím nebude.</p></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  const tabs = [...document.querySelectorAll('[role="tab"]')]
+  const show = (tab) => {
+    tabs.forEach((t) => { const on = t === tab; t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; document.getElementById(t.getAttribute('aria-controls')).hidden = !on })
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => show(t))
+    t.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+      const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]
+      show(next); next.focus()
+    })
+  })
+  show(tabs[0])
+</script>

@@ -1,0 +1,7 @@
+[Unit]
+Description=Reactor operational checks
+[Timer]
+OnBootSec=2m
+OnUnitActiveSec=1m
+[Install]
+WantedBy=timers.target

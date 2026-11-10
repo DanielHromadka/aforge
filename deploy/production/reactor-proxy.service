@@ -1,0 +1,15 @@
+[Unit]
+Description=Reactor loopback routing for Cloudflare Tunnel
+After=network-online.target
+[Service]
+User=reactor
+Group=reactor
+EnvironmentFile=/etc/reactor/production.env
+ExecStart=/usr/bin/caddy run --config /opt/reactor/current/deploy/production/Caddyfile --adapter caddyfile
+ExecReload=/usr/bin/caddy reload --config /opt/reactor/current/deploy/production/Caddyfile --adapter caddyfile
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
